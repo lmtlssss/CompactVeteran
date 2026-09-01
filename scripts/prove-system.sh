@@ -19,11 +19,11 @@ ln -s "$CODEX_HOME/packages/standalone/releases/v1" "$FIXTURE_CURRENT_LINK"; ln 
 git -C "$FIXTURE_REPO" init -q -b main; git -C "$FIXTURE_REPO" config user.email test@example.com; git -C "$FIXTURE_REPO" config user.name test; git init --bare -q "$PROOF_REMOTE"; git -C "$FIXTURE_REPO" remote add origin "$PROOF_REMOTE"
 printf '# fixture\n' >"$FIXTURE_REPO/README.md"; printf '# rules\n' >"$FIXTURE_REPO/AGENTS.md"; printf '# roadmap\n' >"$FIXTURE_REPO/ROADMAP.md"; git -C "$FIXTURE_REPO" add .; git -C "$FIXTURE_REPO" commit -qm initial; git -C "$FIXTURE_REPO" push -qu origin main
 printf '%s\n' '# preserve' 'model_catalog_json="/prior/catalog.json"' 'model_context_window=333333' 'model_auto_compact_token_limit=222222' 'unrelated="keep"' >"$CODEX_HOME/config.toml"
-COMPACTVETERAN_REPO="$root" COMPACTVETERAN_BINARY="$FIXTURE_PLUGIN_BIN" bash "$root/install.sh" >"$tmp/install.out"; test "$(tail -n1 "$tmp/install.out")" = 'CompactVeteran installed. No context left behind.'
+COMPACTVETERAN_REPO="$root" COMPACTVETERAN_BINARY="$FIXTURE_PLUGIN_BIN" sh "$root/install.sh" >"$tmp/install.out"; test "$(tail -n1 "$tmp/install.out")" = 'CompactVeteran installed. No context left behind.'
 python3 "$root/scripts/fixtures/assert_system.py" installed
 printf '%s\n' 'after_install="preserve"' >>"$CODEX_HOME/config.toml"
 (cd "$FIXTURE_REPO" && timeout 30 codex)
 python3 "$root/scripts/fixtures/assert_system.py" lifecycle
-bash "$root/uninstall.sh" >/dev/null
+sh "$root/uninstall.sh" >/dev/null
 python3 "$root/scripts/fixtures/assert_system.py" uninstalled
 echo 'CompactVeteran system proof: PASS'
