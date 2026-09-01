@@ -5,7 +5,6 @@
   "author": {
     "name": "Local developer"
   },
-  "skills": "./skills/",
   "interface": {
     "displayName": "CompactVeteran",
     "shortDescription": "Keep Sol context in Git.",

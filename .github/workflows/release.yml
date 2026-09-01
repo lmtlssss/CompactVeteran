@@ -1,0 +1,15 @@
+name: release
+on:
+  push:
+    tags: ["v*"]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release --manifest-path plugins/compactveteran/runtime/Cargo.toml
+      - run: cp plugins/compactveteran/runtime/target/release/compactveteran compactveteran-x86_64-unknown-linux-gnu
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: compactveteran-x86_64-unknown-linux-gnu
