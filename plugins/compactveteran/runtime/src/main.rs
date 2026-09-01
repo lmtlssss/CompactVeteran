@@ -1,16 +1,18 @@
 mod atomic;
 mod catalog;
 mod config;
+mod control;
 mod git_checkpoint;
 mod hook_input;
 mod project_lock;
 mod project_map;
 mod state;
+mod supervisor;
 use hook_input::HookInput;
 use sha2::{Digest, Sha256};
 use std::{
     env, fs,
-    io::{self, Read},
+    io::{self, Read, Write},
     path::PathBuf,
     process::{Command, Stdio},
 };
@@ -18,54 +20,85 @@ fn home() -> PathBuf {
     env::var_os("CODEX_HOME")
         .map(PathBuf::from)
         .or_else(|| env::var_os("HOME").map(|p| PathBuf::from(p).join(".codex")))
-        .unwrap()
+        .unwrap_or_else(|| PathBuf::from(".codex"))
 }
 fn digest(b: &[u8]) -> String {
     let mut h = Sha256::new();
     h.update(b);
     format!("{:x}", h.finalize())
 }
-fn main() {
-    let mut a = env::args().skip(1);
+fn run_main() -> io::Result<i32> {
+    let mut a = env::args_os().skip(1);
     match a.next().as_deref() {
-        Some("refresh-catalog") => run(|| catalog::refresh().map(|p| println!("{}", p.display()))),
-        Some("install-config") => run(config::install),
-        Some("restore-config") => run(config::restore),
-        Some("config-status") => run(config::status),
+        Some("refresh-catalog") => {
+            catalog::refresh().map(|p| println!("{}", p.display()))?;
+        }
+        Some("install-config") => config::install()?,
+        Some("restore-config") => config::restore()?,
+        Some("config-status") => config::status()?,
         Some("hook") => {
             let k = a.next().unwrap_or_default();
             let mut s = String::new();
-            io::stdin().read_to_string(&mut s).unwrap();
-            let i: HookInput = serde_json::from_str(&s).unwrap_or_default();
+            io::stdin().read_to_string(&mut s)?;
+            let i: HookInput = match serde_json::from_str(&s) {
+                Ok(x) => x,
+                Err(e) => {
+                    println!(
+                        "{}",
+                        serde_json::json!({"continue":false,"stopReason":e.to_string()})
+                    );
+                    return Ok(0);
+                }
+            };
             if !i.is_sol_root() {
                 println!("{{\"continue\":true}}");
-                return;
+                return Ok(0);
             }
             if k == "prompt" || k == "session-start" {
-                state::save(&i).unwrap();
+                state::merge_hook(&i)?;
                 println!("{{\"continue\":true}}")
             } else {
                 match git_checkpoint::run(&i) {
-                    Ok(_) => {
+                    Ok(c) => {
                         if k == "precompact" {
-                            println!("{{\"continue\":false,\"stopReason\":\"Context compaction dodged.\",\"systemMessage\":\"Context compaction dodged.\"}}")
+                            let mut out = serde_json::json!({"continue":false,"stopReason":"Context compaction dodged.","systemMessage":"Context compaction dodged."});
+                            io::stdout().write_all(format!("{}\n", out).as_bytes())?;
+                            io::stdout().flush()?;
+                            if let Some(p) = env::var_os("COMPACTVETERAN_SOCKET") {
+                                let r = control::RestartRequest {
+                                    map: c.map_path.to_string_lossy().into(),
+                                    cwd: c.root.to_string_lossy().into(),
+                                    model: i.model.clone().unwrap_or_default(),
+                                };
+                                if control::notify(&PathBuf::from(p), &r).is_err() {
+                                    out["stopReason"] = serde_json::json!(format!(
+                                        "Context compaction dodged. Run compactveteran continue {}",
+                                        r.map
+                                    ));
+                                    println!("{}", out)
+                                }
+                            }
                         } else {
                             println!("{{\"continue\":true}}")
                         }
                     }
-                    Err(e) => println!("{{\"continue\":false,\"stopReason\":{:?}}}", e.to_string()),
+                    Err(e) => println!(
+                        "{}",
+                        serde_json::json!({"continue":false,"stopReason":e.to_string()})
+                    ),
                 }
             }
         }
-        Some("supervisor") => {
-            let mut c = Command::new(home().join("packages/standalone/current/bin/codex"));
-            c.args(a)
-                .stdin(Stdio::inherit())
-                .stdout(Stdio::inherit())
-                .stderr(Stdio::inherit());
-            std::process::exit(c.status().unwrap().code().unwrap_or(1))
-        }
-        _ => {}
+        Some("supervisor") => return supervisor::run(a.collect(), None),
+        _ => return Ok(0),
+    }
+    Ok(0)
+}
+
+fn main() {
+    if let Err(e) = run_main() {
+        eprintln!("compactveteran: {e}");
+        std::process::exit(1)
     }
 }
 
