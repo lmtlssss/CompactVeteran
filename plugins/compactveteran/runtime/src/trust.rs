@@ -128,6 +128,8 @@ pub fn set(t: bool) -> io::Result<()> {
 pub fn doctor() -> io::Result<()> {
     let s = stock()?;
     let e = env::current_exe()?;
+    let maps = home().join("project-maps");
+    fs::create_dir_all(&maps)?;
     let d = env::var_os("PLUGIN_DATA")
         .map(PathBuf::from)
         .unwrap_or_else(|| home().join("plugins/data/compactveteran-compactveteran"));
@@ -139,7 +141,7 @@ pub fn doctor() -> io::Result<()> {
         ("stock", s != fs::canonicalize(&e)?),
         ("binary", e.metadata()?.permissions().mode() & 0o111 != 0),
         ("data", d.is_dir()),
-        ("maps", home().join("project-maps").is_dir()),
+        ("maps", maps.is_dir()),
         (
             "hooks",
             rpc(None)

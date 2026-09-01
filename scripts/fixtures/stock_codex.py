@@ -54,10 +54,10 @@ def plugin(command):
         if state.get("marketplace"):
             print("compactveteran")
         return
-    elif command == ["marketplace", "upgrade"]:
+    elif command[:2] == ["marketplace", "upgrade"]:
         if not state.get("marketplace"):
             raise SystemExit("marketplace not installed")
-    elif command == ["marketplace", "remove"]:
+    elif command[:2] == ["marketplace", "remove"]:
         state.pop("marketplace", None)
         state.pop("marketplaceName", None)
     elif command[:2] == ["add", "compactveteran@compactveteran"]:
@@ -65,7 +65,7 @@ def plugin(command):
             raise SystemExit("marketplace not installed")
         state["plugin"] = True
         print(json.dumps({"installedPath": str(PLUGIN_ROOT)}, indent=2))
-    elif command == ["remove", "compactveteran@compactveteran"]:
+    elif command[:2] == ["remove", "compactveteran@compactveteran"]:
         state.pop("plugin", None)
     write_json("state.json", state)
 
@@ -80,22 +80,27 @@ def app_server():
         if method == "initialize":
             response = {"jsonrpc": "2.0", "id": ident, "result": {"protocolVersion": "1", "serverInfo": {"name": "compactveteran", "version": "1"}}}
         elif method == "hooks/list":
-            cwd = request.get("params", {}).get("cwd", str(REPO))
+            cwds = request.get("params", {}).get("cwds", [str(REPO)])
+            cwd = cwds[0] if cwds else str(REPO)
             events = ["UserPromptSubmit", "Stop", "PreCompact", "SessionStart"]
-            hooks = [{"eventName": e, "pluginId": "compactveteran@compactveteran", "key": "cv-" + e.lower(), "currentHash": "hash-" + e.lower(), "enabled": hook_state.get(e, {}).get("enabled", True), "trustedHash": hook_state.get(e, {}).get("trusted_hash", "")} for e in events]
+            hooks = [{"eventName": e, "pluginId": "compactveteran@compactveteran", "key": "cv-" + e.lower(), "currentHash": "hash-" + e.lower(), "enabled": hook_state.get(e, {}).get("enabled", False), "trustedHash": hook_state.get(e, {}).get("trusted_hash", None)} for e in events]
             response = {"jsonrpc": "2.0", "id": ident, "result": {"data": [{"cwd": cwd, "hooks": hooks}]}}
         elif method == "config/batchWrite":
             for edit in request.get("params", {}).get("edits", []):
                 key = edit.get("keyPath", "")
+                value = edit.get("value", edit)
                 event = next((e for e in ("UserPromptSubmit", "Stop", "PreCompact", "SessionStart") if e.lower() in key.lower()), None)
                 if event:
+                    if value is None:
+                        hook_state.pop(event, None)
+                        continue
                     hook_state.setdefault(event, {})
                     for field in ("enabled", "trusted_hash"):
-                        if field in edit:
-                            if edit[field] is None:
+                        if field in value:
+                            if value[field] is None:
                                 hook_state[event].pop(field, None)
                             else:
-                                hook_state[event][field] = edit[field]
+                                hook_state[event][field] = value[field]
             atomic(STATE / "hooks.json", json.dumps(hook_state, sort_keys=True, indent=2) + "\n")
             response = {"jsonrpc": "2.0", "id": ident, "result": {}}
         else:
@@ -108,8 +113,12 @@ def invoke(kind, count, version, session, turn, transcript, prompt=None):
     payload = {"hook_event_name": {"prompt": "UserPromptSubmit", "stop": "Stop", "precompact": "PreCompact"}[kind], "model": "gpt-5.6-sol", "session_id": session, "turn_id": turn, "cwd": str(REPO), "transcript_path": str(transcript)}
     if prompt is not None:
         payload["prompt"] = prompt
+    if kind == "precompact":
+        payload["trigger"] = "manual" if count == 1 else "auto"
+        payload["count"] = count
+        atomic(STATE / f"precompact-{count}.payload.json", json.dumps(payload, indent=2) + "\n")
     result = subprocess.run([str(PLUGIN_BIN), "hook", kind], input=json.dumps(payload), text=True, capture_output=True, env=os.environ.copy())
-    atomic(STATE / "hook-stderr.log", result.stderr, binary=False)
+    atomic(STATE / f"{kind}-{count}.stderr.log", result.stderr, binary=False)
     if result.returncode or not result.stdout.strip():
         raise SystemExit("hook failed")
     try:
@@ -120,6 +129,7 @@ def invoke(kind, count, version, session, turn, transcript, prompt=None):
 
 
 def interactive():
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     inv = read_json("invocation-count.json", 0) + 1
     write_json("invocation-count.json", inv)
     version = os.environ.get("STOCK_VERSION", "v1")
@@ -140,7 +150,6 @@ def interactive():
     if inv == 2:
         CURRENT.unlink(missing_ok=True)
         CURRENT.symlink_to(V2)
-    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     while True:
         time.sleep(1)
 
