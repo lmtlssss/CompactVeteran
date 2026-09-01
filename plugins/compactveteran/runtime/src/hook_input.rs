@@ -20,8 +20,6 @@ pub struct HookInput {
     pub cwd: Option<String>,
     pub model: Option<String>,
     pub prompt: Option<String>,
-    pub trigger: Option<String>,
-    pub last_assistant_message: Option<String>,
 }
 impl HookInput {
     pub fn is_sol_root(&self) -> bool {

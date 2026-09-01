@@ -1,4 +1,4 @@
-use crate::{atomic, home, hook_input::HookInput, state};
+use crate::{atomic, home, state};
 use sha2::{Digest, Sha256};
 use std::{
     fs, io,

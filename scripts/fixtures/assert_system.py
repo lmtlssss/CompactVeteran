@@ -118,7 +118,7 @@ def check_uninstalled(home, codex, state, xdg, proof, v2):
     config = tomllib.loads((codex / "config.toml").read_text())
     assert config == {"model_catalog_json": "/prior/catalog.json", "model_context_window": 333333, "model_auto_compact_token_limit": 222222, "unrelated": "keep", "after_install": "preserve"}, "config was not restored"
     launcher = home / ".local/bin/codex"
-    assert launcher.is_symlink() and launcher.readlink() == pathlib.Path(proof.joinpath("original-target").read_text()), "launcher target not restored"
+    assert launcher.is_symlink() and launcher.readlink() == pathlib.Path(proof.joinpath("original-target").read_text().strip()), "launcher target not restored"
     assert launcher.resolve() == (v2 / "bin/codex").resolve(), "restored launcher does not reach v2"
     assert not (codex / "plugins/data/compactveteran-compactveteran").exists() and not (xdg / "compactveteran").exists(), "plugin data remains"
     map_path = pathlib.Path((proof / "map-path").read_text())

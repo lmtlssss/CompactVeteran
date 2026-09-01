@@ -21,8 +21,8 @@ extern "C" fn signal_handler(sig: i32) {
 }
 fn signals() {
     INIT.call_once(|| unsafe {
-        libc::signal(libc::SIGINT, signal_handler as usize);
-        libc::signal(libc::SIGTERM, signal_handler as usize);
+        libc::signal(libc::SIGINT, signal_handler as *const () as usize);
+        libc::signal(libc::SIGTERM, signal_handler as *const () as usize);
     });
 }
 fn stock() -> io::Result<PathBuf> {
@@ -69,7 +69,6 @@ pub fn run(args: Vec<OsString>, initial: Option<RestartRequest>) -> io::Result<i
         config::install()?;
         let bin = stock()?;
         let mut child = launch(&bin, &args, req.as_ref(), &sock)?;
-        req = None;
         loop {
             if let Some(sig) = pending() {
                 unsafe {
