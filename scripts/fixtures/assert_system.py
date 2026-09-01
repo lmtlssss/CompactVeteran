@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 import pathlib
 import subprocess
 import sys
@@ -7,7 +8,7 @@ import tomllib
 
 
 def env(name):
-    value = subprocess.check_output(["printenv", name], text=True).strip()
+    value = os.environ.get(name, "").strip()
     assert value, f"missing environment variable {name}"
     return pathlib.Path(value)
 
@@ -18,6 +19,10 @@ def read(path):
 
 def git(repo, *args):
     return subprocess.check_output(["git", "-C", str(repo), *args], text=True).strip()
+
+
+def git_dir(path, *args):
+    return subprocess.check_output(["git", "--git-dir", str(path), *args], text=True).strip()
 
 
 def check_installed(home, codex, state, xdg, repo):
@@ -42,6 +47,7 @@ def check_installed(home, codex, state, xdg, repo):
     original = read(codex / "models_cache.json")
     patched = read(overlay)
     assert patched.keys() == original.keys(), "catalog root changed"
+    assert [m["slug"] for m in patched["models"]].count("gpt-5.6-sol") == 1 and [m["slug"] for m in patched["models"]].count("gpt-5.6-terra") == 1 and [m["slug"] for m in patched["models"]].count("gpt-5.6-luna") == 1 and [m["slug"] for m in patched["models"]].count("other") == 1, "catalog model set changed"
     for got, want in zip(patched["models"], original["models"]):
         if got["slug"] == "gpt-5.6-sol":
             assert got.get("context_window") == 1050000 and got.get("max_context_window") == 1050000 and got.get("auto_compact_token_limit") == 950000, "Sol catalog values wrong"
@@ -52,7 +58,7 @@ def check_installed(home, codex, state, xdg, repo):
             assert patched[key] == original[key], f"catalog root key changed: {key}"
 
 
-def check_lifecycle(codex, state, repo, v2, proof):
+def check_lifecycle(codex, state, xdg, repo, v2, remote, proof):
     rows = [json.loads(x) for x in (state / "invocations.jsonl").read_text().splitlines()]
     assert [x["count"] for x in rows] == [1, 2, 3] and [x["version"] for x in rows] == ["v1", "v1", "v2"], "invocation sequence changed"
     assert len({x["pid"] for x in rows}) == 3 and all(x["pid"] > 0 for x in rows), "process lineage invalid"
@@ -63,7 +69,7 @@ def check_lifecycle(codex, state, repo, v2, proof):
     maps = list((codex / "project-maps").glob("*.md"))
     assert len(maps) == 1 and maps[0] == map_path, "project map count/path wrong"
     for n, row in enumerate(rows[1:3], 2):
-        assert row["argv"] == ["-C", canonical, "--model", "gpt-5.6-sol", f"Read this map. Treat it as a map, inspect Git and the referenced raw logs, and continue the unfinished work from HEAD. {map_path}"], f"invocation {n} handoff argv wrong"
+        assert row["argv"] == ["-C", canonical, "--model", "gpt-5.6-sol", f"Read {map_path}. Treat it as a map, inspect Git and the referenced raw logs, and continue the unfinished work from HEAD."], f"invocation {n} handoff argv wrong"
         joined = " ".join(row["argv"]).lower()
         for bad in ("resume", "session-1", "session-2", "build the first checkpoint", "continue the second checkpoint"):
             assert bad not in joined, f"forbidden handoff text: {bad}"
@@ -76,18 +82,24 @@ def check_lifecycle(codex, state, repo, v2, proof):
     for p in state.rglob("*"):
         assert "compacted" not in p.name
         if p.is_file():
-            try: assert "compacted_history" not in p.read_text()
+            try: assert "compacted_history" not in p.read_text() and "generated summary" not in p.read_text()
             except UnicodeDecodeError: pass
     assert not git(repo, "status", "--porcelain") and all(git(repo, "ls-files", x) == x for x in ("work-one.txt", "work-two.txt")), "repository is not clean/tracked"
-    assert git(repo, "rev-parse", "HEAD") == git(repo, "--git-dir", str(repo / ".git"), "rev-parse", "refs/heads/main"), "local HEAD differs from remote"
-    assert git(repo, "log", "--format=%s").splitlines().count("compactveteran: checkpoint") == 2, "checkpoint count wrong"
+    assert git(repo, "rev-parse", "HEAD") == git_dir(remote, "rev-parse", "refs/heads/main"), "local HEAD differs from remote"
+    assert sum(x.startswith("compactveteran: checkpoint ") for x in git(repo, "log", "--format=%s").splitlines()) == 2, "checkpoint count wrong"
     text = map_path.read_text()
     assert f"- canonical root: {canonical}" in text and f"- HEAD: {git(repo, 'rev-parse', 'HEAD')}" in text and "- branch: main" in text and "- upstream: origin/main" in text and "- clean: true" in text, "map Git state wrong"
     t2 = (state / "transcript2.jsonl").resolve()
     assert str(t2) in text and hashlib.sha256(t2.read_bytes()).hexdigest() in text and "continue the second checkpoint" in text, "map transcript/directive wrong"
     assert "session-1\t" + str((state / "transcript1.jsonl").resolve()) in text and "session-2\t" + str(t2) in text and "compactveteran: checkpoint" in text and "- " + str(repo / "README.md") in text and "- " + str(repo / "AGENTS.md") in text and "- " + str(repo / "ROADMAP.md") in text and "Read this map. Treat it as a map, inspect Git and the referenced raw logs, and continue the unfinished work from HEAD." in text, "map contents incomplete"
-    for p in (state / "sessions/session-1.json", state / "sessions/session-2.json", state / "projects" / (h + ".json")):
+    runtime = xdg / "compactveteran"
+    for p in (runtime / "sessions/session-1.json", runtime / "sessions/session-2.json", runtime / "projects" / (h + ".json")):
         assert p.is_file(), f"state file missing: {p.name}"
+    project = read(runtime / "projects" / (h + ".json"))
+    assert project.get("canonical_root") == canonical and [(x.get("session_id"), x.get("transcript_path")) for x in project.get("sessions", [])] == [("session-1", str((state / "transcript1.jsonl").resolve())), ("session-2", str(t2))], "project lineage wrong"
+    for n in (1, 2):
+        session = read(runtime / "sessions" / f"session-{n}.json")
+        assert session.get("session_id") == f"session-{n}" and session.get("latest_prompt") == ("build the first checkpoint" if n == 1 else "continue the second checkpoint") and session.get("transcript_path") == str((state / f"transcript{n}.jsonl").resolve()), f"session {n} state wrong"
     assert pathlib.Path(codex / "packages/standalone/current").resolve() == v2.resolve(), "current release did not switch"
     proof.mkdir(parents=True, exist_ok=True)
     (proof / "map-path").write_text(str(map_path))
@@ -114,12 +126,12 @@ def main():
     try:
         phase = sys.argv[1]
         home, codex, state, xdg = env("HOME"), env("CODEX_HOME"), env("FIXTURE_STATE"), env("XDG_STATE_HOME")
-        repo, v2, proof = env("FIXTURE_REPO"), env("FIXTURE_V2_TARGET"), env("PROOF_TMP")
+        repo, v2, remote, proof = env("FIXTURE_REPO"), env("FIXTURE_V2_TARGET"), env("PROOF_REMOTE"), env("PROOF_TMP")
         if phase == "installed": check_installed(home, codex, state, xdg, repo)
-        elif phase == "lifecycle": check_lifecycle(codex, state, repo, v2, proof)
+        elif phase == "lifecycle": check_lifecycle(codex, state, xdg, repo, v2, remote, proof)
         elif phase == "uninstalled": check_uninstalled(home, codex, state, xdg, proof, v2)
         else: raise AssertionError("phase must be installed, lifecycle, or uninstalled")
-    except (AssertionError, KeyError, IndexError, subprocess.CalledProcessError) as exc:
+    except (AssertionError, KeyError, IndexError, OSError, ValueError, tomllib.TOMLDecodeError, subprocess.CalledProcessError) as exc:
         print(str(exc), file=sys.stderr)
         return 1
     return 0
