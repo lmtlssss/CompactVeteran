@@ -45,7 +45,27 @@ pub fn write(r: &Path, h: &str, s: &state::SessionState) -> io::Result<PathBuf> 
     x += f;
     x.push_str("\n\n## Recent commits\n\n```text\n");
     x += &g(r, &["log", "-10", "--oneline"])?;
-    x.push_str("\n```\n\n## Resume\n\nRead this map. Treat it as a map, inspect Git and the referenced raw logs, and continue the unfinished work from HEAD.\n");
+    x.push_str("\n```\n\n## Session lineage\n\n```text\n");
+    if let Some(project) = state::load_project(h)? {
+        for session in project.sessions {
+            x.push_str(&session.session_id);
+            x.push('\t');
+            x.push_str(session.transcript_path.as_deref().unwrap_or(""));
+            x.push('\n');
+        }
+    }
+    x.push_str("```\n\n## Sources\n\n");
+    for name in ["AGENTS.md", "ROADMAP.md", "PRODUCT_ROADMAP.md", "README.md"] {
+        let p = r.join(name);
+        if p.exists() {
+            x.push_str(&format!("- {}\n", p.display()));
+        }
+    }
+    let registry = home().join("project-truth/registry.toml");
+    if registry.exists() {
+        x.push_str(&format!("- {}\n", registry.display()));
+    }
+    x.push_str("\n## Resume\n\nRead this map. Treat it as a map, inspect Git and the referenced raw logs, and continue the unfinished work from HEAD.\n");
     let p = home().join("project-maps").join(format!("{h}.md"));
     atomic::write(&p, x.as_bytes())?;
     Ok(p)

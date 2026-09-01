@@ -37,6 +37,13 @@ pub fn load_session(id: &str) -> io::Result<Option<SessionState>> {
     }
     Ok(Some(serde_json::from_slice(&fs::read(p)?)?))
 }
+pub fn load_project(root_hash: &str) -> io::Result<Option<ProjectState>> {
+    let p = dir().join("projects").join(format!("{root_hash}.json"));
+    if !p.exists() {
+        return Ok(None);
+    }
+    Ok(Some(serde_json::from_slice(&fs::read(p)?)?))
+}
 pub fn merge_hook(i: &HookInput) -> io::Result<SessionState> {
     let id = i
         .session_id
