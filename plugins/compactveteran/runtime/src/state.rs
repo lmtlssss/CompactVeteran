@@ -1,4 +1,4 @@
-use crate::hook_input::HookInput;
+use crate::{atomic, hook_input::HookInput};
 use serde::{Deserialize, Serialize};
 use std::{env, fs, io, path::PathBuf};
 #[derive(Serialize, Deserialize, Clone, Default)]
@@ -26,16 +26,6 @@ pub fn dir() -> PathBuf {
         .or_else(|| env::var_os("HOME").map(|p| PathBuf::from(p).join(".local/state")))
         .unwrap()
         .join("compactveteran")
-}
-fn put(p: &PathBuf, b: &[u8]) -> io::Result<()> {
-    fs::create_dir_all(p.parent().unwrap())?;
-    let t = p.with_file_name(format!(
-        ".{}.{}.tmp",
-        p.file_name().unwrap().to_string_lossy(),
-        std::process::id()
-    ));
-    fs::write(&t, b)?;
-    fs::rename(t, p)
 }
 pub fn load_session(id: &str) -> io::Result<Option<SessionState>> {
     if id.is_empty() {
@@ -72,7 +62,7 @@ pub fn merge_hook(i: &HookInput) -> io::Result<SessionState> {
     if i.model.as_deref().is_some_and(|x| !x.is_empty()) {
         s.model = i.model.clone()
     }
-    put(
+    atomic::write(
         &dir().join("sessions").join(format!("{id}.json")),
         &serde_json::to_vec_pretty(&s).unwrap(),
     )?;
@@ -94,7 +84,7 @@ pub fn record_project_session(h: &str, s: &SessionState) -> io::Result<()> {
         })
     }
     x.canonical_root = s.cwd.clone().unwrap_or_default();
-    put(&p, &serde_json::to_vec_pretty(&x).unwrap())
+    atomic::write(&p, &serde_json::to_vec_pretty(&x).unwrap())
 }
 pub fn save(i: &HookInput) -> io::Result<()> {
     merge_hook(i).map(|_| ())

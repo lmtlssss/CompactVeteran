@@ -1,3 +1,4 @@
+mod atomic;
 mod catalog;
 mod config;
 mod git_checkpoint;
@@ -18,15 +19,6 @@ fn home() -> PathBuf {
         .or_else(|| env::var_os("HOME").map(|p| PathBuf::from(p).join(".codex")))
         .unwrap()
 }
-fn state_dir() -> PathBuf {
-    state::dir()
-}
-fn atomic(p: &std::path::Path, b: &[u8]) -> io::Result<()> {
-    fs::create_dir_all(p.parent().unwrap())?;
-    let t = p.with_extension("tmp");
-    fs::write(&t, b)?;
-    fs::rename(t, p)
-}
 fn digest(b: &[u8]) -> String {
     let mut h = Sha256::new();
     h.update(b);
@@ -35,9 +27,10 @@ fn digest(b: &[u8]) -> String {
 fn main() {
     let mut a = env::args().skip(1);
     match a.next().as_deref() {
-        Some("refresh-catalog") => println!("{}", catalog::refresh().unwrap().display()),
-        Some("install-config") => config::install().unwrap(),
-        Some("restore-config") => config::restore().unwrap(),
+        Some("refresh-catalog") => run(|| catalog::refresh().map(|p| println!("{}", p.display()))),
+        Some("install-config") => run(config::install),
+        Some("restore-config") => run(config::restore),
+        Some("config-status") => run(config::status),
         Some("hook") => {
             let k = a.next().unwrap_or_default();
             let mut s = String::new();
@@ -72,5 +65,12 @@ fn main() {
             std::process::exit(c.status().unwrap().code().unwrap_or(1))
         }
         _ => {}
+    }
+}
+
+fn run(f: impl FnOnce() -> io::Result<()>) {
+    if let Err(e) = f() {
+        eprintln!("compactveteran: {e}");
+        std::process::exit(1);
     }
 }
