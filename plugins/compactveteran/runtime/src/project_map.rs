@@ -5,6 +5,7 @@ use std::{
     path::{Path, PathBuf},
     process::Command,
 };
+
 fn g(r: &Path, a: &[&str]) -> io::Result<String> {
     let o = Command::new("git").arg("-C").arg(r).args(a).output()?;
     if !o.status.success() {
@@ -19,48 +20,70 @@ fn dh(b: &[u8]) -> String {
     h.update(b);
     format!("{:x}", h.finalize())
 }
+fn clip(s: &str, max: usize) -> String {
+    if s.len() <= max {
+        return s.into();
+    }
+    let marker = "\n[clipped; full text is in the raw transcript]\n";
+    let room = max.saturating_sub(marker.len());
+    let mut n = room / 2;
+    while !s.is_char_boundary(n) {
+        n -= 1;
+    }
+    let mut tail = room - n;
+    while !s.is_char_boundary(s.len() - tail) {
+        tail -= 1;
+    }
+    format!("{}{}{}", &s[..n], marker, &s[s.len() - tail..])
+}
 pub fn write(r: &Path, h: &str, s: &state::SessionState) -> io::Result<PathBuf> {
+    let project = state::load_project(h)?.unwrap_or_default();
     let t = s.transcript_path.clone().unwrap_or_default();
     let th = if !t.is_empty() && Path::new(&t).is_file() {
         dh(&fs::read(&t)?)
     } else {
         "missing".into()
     };
+    let branch = g(r, &["branch", "--show-current"])?;
+    let head = g(r, &["rev-parse", "HEAD"])?;
     let clean = g(r, &["status", "--porcelain", "--untracked-files=all"])?.is_empty();
-    let mut x=format!("# CompactVeteran handoff\n\n## Scope\n\n- canonical root: {}\n- branch: {}\n- HEAD: {}\n- clean: {}\n- current session: {}\n- transcript: {}\n- transcript SHA256: {}\n\n## Latest directive\n\n",r.display(),g(r,&["branch","--show-current"] )?,g(r,&["rev-parse","HEAD"] )?,clean,s.session_id,t,th);
-    let f = if s.latest_prompt.as_deref().unwrap_or("").contains("```") {
-        "````"
-    } else {
-        "```"
-    };
-    x += f;
-    x.push_str("text\n");
-    x.push_str(s.latest_prompt.as_deref().unwrap_or(""));
-    x.push('\n');
-    x += f;
-    x.push_str("\n\n## Recent commits\n\n```text\n");
-    x += &g(r, &["log", "-10", "--oneline"])?;
-    x.push_str("\n```\n\n## Session lineage\n\n```text\n");
-    if let Some(project) = state::load_project(h)? {
-        for session in project.sessions {
-            x.push_str(&session.session_id);
-            x.push('\t');
-            x.push_str(session.transcript_path.as_deref().unwrap_or(""));
-            x.push('\n');
-        }
-    }
-    x.push_str("```\n\n## Sources\n\n");
+    let objective = project
+        .objective
+        .as_deref()
+        .filter(|x| !x.is_empty())
+        .or(s.latest_prompt.as_deref())
+        .unwrap_or("");
+    let cursor = project
+        .last_assistant_result
+        .as_deref()
+        .filter(|x| !x.is_empty())
+        .or(s.last_assistant_message.as_deref())
+        .unwrap_or("");
+    let mut x = format!("# CompactVeteran handoff\n\n## Scope\n\n- canonical root: {}\n- branch: {}\n- HEAD: {}\n- clean: {}\n- current session: {}\n- transcript: {}\n- transcript SHA256: {}\n\n## Objective\n\n{}\n\n## Cursor\n\n{}\n\n## Next action\n\nContinue the Objective from the Cursor at local HEAD. Use listed project sources only as needed. Open the raw transcript only for a specific unresolved ambiguity.\n\n## Recent commits\n\n```text\n{}\n```\n\n## Sources\n\n", r.display(), branch, head, clean, s.session_id, t, th, clip(objective, 6000), clip(cursor, 4000), g(r, &["log", "-5", "--oneline"])?);
     for name in ["AGENTS.md", "ROADMAP.md", "PRODUCT_ROADMAP.md", "README.md"] {
-        let p = r.join(name);
-        if p.exists() {
-            x.push_str(&format!("- {}\n", p.display()));
+        if r.join(name).exists() {
+            x.push_str(&format!("- {}\n", r.join(name).display()));
         }
     }
     let registry = home().join("project-truth/registry.toml");
     if registry.exists() {
         x.push_str(&format!("- {}\n", registry.display()));
     }
-    x.push_str("\n## Resume\n\nRead this map. Treat it as a map, inspect Git and the referenced raw logs, and continue the unfinished work from HEAD.\n");
+    x.push_str("\n## Recovery pointers\n\n- transcript: ");
+    x.push_str(&t);
+    x.push_str("\n- transcript SHA256: ");
+    x.push_str(&th);
+    x.push_str("\n\n### Session lineage\n\n");
+    for z in project.sessions.iter().rev().take(3).rev() {
+        x.push_str(&format!(
+            "- {}\t{}\n",
+            z.session_id,
+            z.transcript_path.as_deref().unwrap_or("")
+        ));
+    }
+    if x.len() > 16384 {
+        return Err(io::Error::other("project map exceeds 16384 bytes"));
+    }
     let p = home().join("project-maps").join(format!("{h}.md"));
     atomic::write(&p, x.as_bytes())?;
     Ok(p)
