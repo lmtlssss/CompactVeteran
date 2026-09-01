@@ -73,7 +73,7 @@ def check_lifecycle(codex, state, xdg, repo, v2, remote, proof):
     maps = list((codex / "project-maps").glob("*.md"))
     assert len(maps) == 1 and maps[0] == map_path, "project map count/path wrong"
     for n, row in enumerate(rows[1:3], 2):
-        assert row["argv"] == ["-C", canonical, "--model", "gpt-5.6-sol", f"Read {map_path}. Treat it as a map, inspect Git and the referenced raw logs, and continue the unfinished work from HEAD."], f"invocation {n} handoff argv wrong"
+        assert row["argv"] == ["-C", canonical, "--model", "gpt-5.6-sol", f"Read {map_path}. Use its Objective, Cursor, and Next action. Continue immediately from local HEAD. Open a referenced raw log only if a specific ambiguity blocks the next action."], f"invocation {n} handoff argv wrong"
         joined = " ".join(row["argv"]).lower()
         for bad in ("resume", "session-1", "session-2", "build the first checkpoint", "continue the second checkpoint"):
             assert bad not in joined, f"forbidden handoff text: {bad}"
@@ -93,18 +93,19 @@ def check_lifecycle(codex, state, xdg, repo, v2, remote, proof):
     assert "compactveteran: checkpoint" not in git_dir(remote, "log", "--format=%s", "refs/heads/main"), "remote received checkpoint"
     assert sum(x.startswith("compactveteran: checkpoint ") for x in git(repo, "log", "--format=%s").splitlines()) == 2, "checkpoint count wrong"
     text = map_path.read_text()
-    assert f"- canonical root: {canonical}" in text and f"- HEAD: {git(repo, 'rev-parse', 'HEAD')}" in text and "- branch: main" in text and "- upstream: origin/main" in text and "- clean: true" in text, "map Git state wrong"
+    assert text.startswith("# CompactVeteran handoff\n") and f"- canonical root: {canonical}" in text and f"- HEAD: {git(repo, 'rev-parse', 'HEAD')}" in text and "- branch: main" in text and "- clean: true" in text and "- upstream:" not in text and "- remote:" not in text, "map Git state wrong"
     t2 = (state / "transcript2.jsonl").resolve()
-    assert str(t2) in text and hashlib.sha256(t2.read_bytes()).hexdigest() in text and "continue the second checkpoint" in text, "map transcript/directive wrong"
-    assert "session-1\t" + str((state / "transcript1.jsonl").resolve()) in text and "session-2\t" + str(t2) in text and "compactveteran: checkpoint" in text and "- " + str(repo / "README.md") in text and "- " + str(repo / "AGENTS.md") in text and "- " + str(repo / "ROADMAP.md") in text and "Read this map. Treat it as a map, inspect Git and the referenced raw logs, and continue the unfinished work from HEAD." in text, "map contents incomplete"
+    assert str(t2) in text and hashlib.sha256(t2.read_bytes()).hexdigest() in text and "build the first checkpoint" in text and "second result complete; next action: report the proof" in text, "map transcript/cursor wrong"
+    assert "session-1\t" + str((state / "transcript1.jsonl").resolve()) in text and "session-2\t" + str(t2) in text and "compactveteran: checkpoint" in text and "- " + str(repo / "README.md") in text and "- " + str(repo / "AGENTS.md") in text and "- " + str(repo / "ROADMAP.md") in text and "Continue the Objective from the Cursor at local HEAD. Use listed project sources only as needed. Open the raw transcript only for a specific unresolved ambiguity." not in text and len(text.encode()) <= 16384 and "offline.git" not in text and "upstream:" not in text and "remote:" not in text, "map contents incomplete"
+    assert len(text.split("## Recent commits\n\n```text\n", 1)[1].split("\n```", 1)[0].splitlines()) <= 5 and len(text.split("### Session lineage\n\n", 1)[1].splitlines()) <= 3, "map sections exceed bounds"
     runtime = xdg / "compactveteran"
     for p in (runtime / "sessions/session-1.json", runtime / "sessions/session-2.json", runtime / "projects" / (h + ".json")):
         assert p.is_file(), f"state file missing: {p.name}"
     project = read(runtime / "projects" / (h + ".json"))
-    assert project.get("canonical_root") == canonical and [(x.get("session_id"), x.get("transcript_path")) for x in project.get("sessions", [])] == [("session-1", str((state / "transcript1.jsonl").resolve())), ("session-2", str(t2))], "project lineage wrong"
+    assert project.get("canonical_root") == canonical and project.get("objective") == "build the first checkpoint" and project.get("last_assistant_result") == "second result complete; next action: report the proof" and [(x.get("session_id"), x.get("transcript_path")) for x in project.get("sessions", [])] == [("session-1", str((state / "transcript1.jsonl").resolve())), ("session-2", str(t2))], "project lineage wrong"
     for n in (1, 2):
         session = read(runtime / "sessions" / f"session-{n}.json")
-        assert session.get("session_id") == f"session-{n}" and session.get("latest_prompt") == ("build the first checkpoint" if n == 1 else "continue the second checkpoint") and session.get("transcript_path") == str((state / f"transcript{n}.jsonl").resolve()), f"session {n} state wrong"
+        assert session.get("session_id") == f"session-{n}" and session.get("latest_prompt") == ("build the first checkpoint" if n == 1 else None) and session.get("transcript_path") == str((state / f"transcript{n}.jsonl").resolve()), f"session {n} state wrong"
     assert pathlib.Path(codex / "packages/standalone/current").resolve() == v2.resolve(), "current release did not switch"
     proof.mkdir(parents=True, exist_ok=True)
     (proof / "map-path").write_text(str(map_path))

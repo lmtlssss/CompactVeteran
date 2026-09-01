@@ -120,7 +120,7 @@ def app_server():
 
 
 def invoke(kind, count, version, session, turn, transcript, prompt=None):
-    payload = {"hook_event_name": {"prompt": "UserPromptSubmit", "stop": "Stop", "precompact": "PreCompact", "session-start": "SessionStart"}[kind], "model": "gpt-5.6-sol", "session_id": session, "turn_id": turn, "cwd": str(REPO), "transcript_path": str(transcript), "last_assistant_message": f"assistant result {count}" if kind == "stop" else None}
+    payload = {"hook_event_name": {"prompt": "UserPromptSubmit", "stop": "Stop", "precompact": "PreCompact", "session-start": "SessionStart"}[kind], "model": "gpt-5.6-sol", "session_id": session, "turn_id": turn, "cwd": str(REPO), "transcript_path": str(transcript), "last_assistant_message": ("first result complete; next action: continue locally" if count == 1 else "second result complete; next action: report the proof") if kind == "stop" else None}
     if prompt is not None:
         payload["prompt"] = prompt
     if kind == "precompact":
@@ -165,7 +165,7 @@ def interactive():
     if inv == 1:
         invoke_model("gpt-5.6-terra", "terra-bypass")
         invoke_model("gpt-5.6-luna", "luna-bypass")
-    invoke("prompt", inv, version, session, turn, transcript, f"build the first checkpoint" if inv == 1 else "continue the second checkpoint")
+    invoke("prompt", inv, version, session, turn, transcript, "build the first checkpoint" if inv == 1 else sys.argv[-1])
     atomic(REPO / ("work-one.txt" if inv == 1 else "work-two.txt"), f"checkpoint {inv}\n")
     invoke("stop", inv, version, session, turn, transcript)
     invoke("precompact", inv, version, session, turn, transcript)
