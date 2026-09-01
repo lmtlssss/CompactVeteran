@@ -7,7 +7,6 @@ use std::{
     env,
     ffi::OsString,
     io::{self, Read},
-    os::unix::process::CommandExt,
     path::PathBuf,
     process::{Child, Command, Stdio},
     sync::{
@@ -65,10 +64,10 @@ pub fn run(args: Vec<OsString>, initial: Option<RestartRequest>) -> io::Result<i
     let path = state_path().join("run").join(format!("{pid}.sock"));
     let listener = Listener::bind(path.clone())?;
     let sock = path.to_string_lossy().to_string();
-    let bin = stock()?;
     let mut req = initial;
     loop {
         config::install()?;
+        let bin = stock()?;
         let mut child = launch(&bin, &args, req.as_ref(), &sock)?;
         req = None;
         loop {

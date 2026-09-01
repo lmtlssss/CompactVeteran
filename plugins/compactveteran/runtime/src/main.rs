@@ -8,24 +8,18 @@ mod project_lock;
 mod project_map;
 mod state;
 mod supervisor;
+mod trust;
 use hook_input::HookInput;
-use sha2::{Digest, Sha256};
 use std::{
     env, fs,
     io::{self, Read, Write},
     path::PathBuf,
-    process::{Command, Stdio},
 };
 fn home() -> PathBuf {
     env::var_os("CODEX_HOME")
         .map(PathBuf::from)
         .or_else(|| env::var_os("HOME").map(|p| PathBuf::from(p).join(".codex")))
         .unwrap_or_else(|| PathBuf::from(".codex"))
-}
-fn digest(b: &[u8]) -> String {
-    let mut h = Sha256::new();
-    h.update(b);
-    format!("{:x}", h.finalize())
 }
 fn run_main() -> io::Result<i32> {
     let mut a = env::args_os().skip(1);
@@ -37,6 +31,9 @@ fn run_main() -> io::Result<i32> {
         Some("install-config") => config::install()?,
         Some("restore-config") => config::restore()?,
         Some("config-status") => config::status()?,
+        Some("trust") => trust::set(true)?,
+        Some("untrust") => trust::set(false)?,
+        Some("doctor") => trust::doctor()?,
         Some("hook") => {
             let k = a.next().unwrap_or_default();
             let mut s = String::new();
@@ -56,29 +53,38 @@ fn run_main() -> io::Result<i32> {
                 return Ok(0);
             }
             if k == "prompt" || k == "session-start" {
-                state::merge_hook(&i)?;
+                if let Err(e) = state::merge_hook(&i) {
+                    println!(
+                        "{}",
+                        serde_json::json!({"continue":false,"stopReason":e.to_string()})
+                    );
+                    return Ok(0);
+                }
                 println!("{{\"continue\":true}}")
             } else {
                 match git_checkpoint::run(&i) {
                     Ok(c) => {
                         if k == "precompact" {
-                            let mut out = serde_json::json!({"continue":false,"stopReason":"Context compaction dodged.","systemMessage":"Context compaction dodged."});
-                            io::stdout().write_all(format!("{}\n", out).as_bytes())?;
-                            io::stdout().flush()?;
-                            if let Some(p) = env::var_os("COMPACTVETERAN_SOCKET") {
+                            let mut stop = "Context compaction dodged.".to_string();
+                            let notified = if let Some(p) = env::var_os("COMPACTVETERAN_SOCKET") {
                                 let r = control::RestartRequest {
                                     map: c.map_path.to_string_lossy().into(),
                                     cwd: c.root.to_string_lossy().into(),
                                     model: i.model.clone().unwrap_or_default(),
                                 };
-                                if control::notify(&PathBuf::from(p), &r).is_err() {
-                                    out["stopReason"] = serde_json::json!(format!(
-                                        "Context compaction dodged. Run compactveteran continue {}",
-                                        r.map
-                                    ));
-                                    println!("{}", out)
-                                }
+                                control::notify(&PathBuf::from(p), &r).is_ok()
+                            } else {
+                                false
+                            };
+                            if !notified {
+                                stop = format!(
+                                    "Context compaction dodged. Run compactveteran continue {}",
+                                    c.map_path.display()
+                                );
                             }
+                            let out = serde_json::json!({"continue":false,"stopReason":stop,"systemMessage":"Context compaction dodged."});
+                            io::stdout().write_all(format!("{}\n", out).as_bytes())?;
+                            io::stdout().flush()?
                         } else {
                             println!("{{\"continue\":true}}")
                         }
@@ -119,12 +125,5 @@ fn main() {
     if let Err(e) = run_main() {
         eprintln!("compactveteran: {e}");
         std::process::exit(1)
-    }
-}
-
-fn run(f: impl FnOnce() -> io::Result<()>) {
-    if let Err(e) = f() {
-        eprintln!("compactveteran: {e}");
-        std::process::exit(1);
     }
 }
