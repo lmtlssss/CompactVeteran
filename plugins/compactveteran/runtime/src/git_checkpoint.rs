@@ -77,14 +77,6 @@ pub fn run(i: &HookInput) -> io::Result<Checkpoint> {
             return Err(io::Error::other("git diff failed"));
         }
     }
-    if g(
-        &r,
-        &["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
-    )
-    .is_ok()
-    {
-        g(&r, &["push"])?;
-    }
     if !g(&r, &["status", "--porcelain", "--untracked-files=all"])?.is_empty() {
         return Err(io::Error::other("working tree not clean"));
     }

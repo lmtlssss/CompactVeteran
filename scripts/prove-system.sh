@@ -21,6 +21,7 @@ printf '# fixture\n' >"$FIXTURE_REPO/README.md"; printf '# rules\n' >"$FIXTURE_R
 printf '%s\n' '# preserve' 'model_catalog_json="/prior/catalog.json"' 'model_context_window=333333' 'model_auto_compact_token_limit=222222' 'unrelated="keep"' >"$CODEX_HOME/config.toml"
 COMPACTVETERAN_REPO="$root" COMPACTVETERAN_BINARY="$FIXTURE_PLUGIN_BIN" sh "$root/install.sh" >"$tmp/install.out"; test "$(tail -n1 "$tmp/install.out")" = 'CompactVeteran installed. No context left behind.'
 python3 "$root/scripts/fixtures/assert_system.py" installed
+git -C "$FIXTURE_REPO" remote set-url origin http://127.0.0.1:9/offline.git
 printf '%s\n' 'after_install="preserve"' >>"$CODEX_HOME/config.toml"
 (cd "$FIXTURE_REPO" && timeout 30 codex)
 python3 "$root/scripts/fixtures/assert_system.py" lifecycle
