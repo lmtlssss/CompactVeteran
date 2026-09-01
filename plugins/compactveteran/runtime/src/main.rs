@@ -91,6 +91,25 @@ fn run_main() -> io::Result<i32> {
             }
         }
         Some("supervisor") => return supervisor::run(a.collect(), None),
+        Some("continue") => {
+            let map = PathBuf::from(a.next().ok_or_else(|| io::Error::other("missing map"))?);
+            let text = fs::read_to_string(&map)?;
+            let root = text
+                .lines()
+                .find_map(|l| l.strip_prefix("- canonical root: "))
+                .ok_or_else(|| io::Error::other("map has no canonical root"))?;
+            if !PathBuf::from(root).is_dir() {
+                return Err(io::Error::other("map root missing"));
+            }
+            return supervisor::run(
+                Vec::new(),
+                Some(control::RestartRequest {
+                    map: map.to_string_lossy().into(),
+                    cwd: root.into(),
+                    model: "gpt-5.6-sol".into(),
+                }),
+            );
+        }
         _ => return Ok(0),
     }
     Ok(0)
