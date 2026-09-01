@@ -62,7 +62,7 @@ fn rpc(trusted: Option<bool>) -> io::Result<Vec<(String, String, bool)>> {
     let read = |id: u64| -> io::Result<Value> {
         loop {
             let v = rx
-                .recv_timeout(Duration::from_secs(30))
+                .recv_timeout(Duration::from_secs(120))
                 .map_err(|e| io::Error::other(format!("app-server response: {e}")))??;
             if v["id"].as_u64() == Some(id) {
                 if let Some(error) = v.get("error") {
