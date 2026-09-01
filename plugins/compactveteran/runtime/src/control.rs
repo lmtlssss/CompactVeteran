@@ -12,7 +12,9 @@ pub struct RestartRequest {
     pub cwd: String,
     pub model: String,
 }
-pub fn handoff_prompt(map: &str) -> String { format!("Read {map}. Use its Objective, Cursor, and Next action. Continue immediately from local HEAD. Open a referenced raw log only if a specific ambiguity blocks the next action.") }
+pub fn handoff_prompt(map: &str) -> String {
+    format!("Read {map}. Use its Objective, Cursor, and Next action. Continue immediately from local HEAD. Open a referenced raw log only if a specific ambiguity blocks the next action.")
+}
 
 pub fn notify(path: &Path, request: &RestartRequest) -> io::Result<()> {
     let mut s = UnixStream::connect(path)?;

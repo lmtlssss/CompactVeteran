@@ -26,13 +26,8 @@ pub fn write(r: &Path, h: &str, s: &state::SessionState) -> io::Result<PathBuf> 
     } else {
         "missing".into()
     };
-    let u = g(
-        r,
-        &["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
-    )
-    .unwrap_or_else(|_| "none".into());
     let clean = g(r, &["status", "--porcelain", "--untracked-files=all"])?.is_empty();
-    let mut x=format!("# CompactVeteran\n\n## Git\n\n- canonical root: {}\n- branch: {}\n- HEAD: {}\n- upstream: {}\n- clean: {}\n\n```text\n{}\n```\n\n## Chat\n\n- current session id: {}\n- transcript: {}\n- transcript SHA256: {}\n\n## Latest directive\n\n",r.display(),g(r,&["branch","--show-current"] )?,g(r,&["rev-parse","HEAD"] )?,u,clean,g(r,&["remote","-v"] )?,s.session_id,t,th);
+    let mut x=format!("# CompactVeteran handoff\n\n## Scope\n\n- canonical root: {}\n- branch: {}\n- HEAD: {}\n- clean: {}\n- current session: {}\n- transcript: {}\n- transcript SHA256: {}\n\n## Latest directive\n\n",r.display(),g(r,&["branch","--show-current"] )?,g(r,&["rev-parse","HEAD"] )?,clean,s.session_id,t,th);
     let f = if s.latest_prompt.as_deref().unwrap_or("").contains("```") {
         "````"
     } else {

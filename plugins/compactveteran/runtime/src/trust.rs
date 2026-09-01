@@ -91,7 +91,12 @@ fn rpc(trusted: Option<bool>) -> io::Result<Vec<(String, String, bool)>> {
         .ok_or_else(|| io::Error::other("no hooks"))?;
     let mut edits = Vec::new();
     let mut out = Vec::new();
-    for (n, wire) in [("UserPromptSubmit", "userPromptSubmit"), ("Stop", "stop"), ("PreCompact", "preCompact"), ("SessionStart", "sessionStart")] {
+    for (n, wire) in [
+        ("UserPromptSubmit", "userPromptSubmit"),
+        ("Stop", "stop"),
+        ("PreCompact", "preCompact"),
+        ("SessionStart", "sessionStart"),
+    ] {
         let h = hs
             .iter()
             .find(|h| h["pluginId"] == "compactveteran@compactveteran" && h["eventName"] == wire)

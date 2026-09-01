@@ -53,9 +53,15 @@ fn run_main() -> io::Result<i32> {
                 return Ok(0);
             }
             if k == "prompt" || k == "session-start" {
-                let internal = env::var("COMPACTVETERAN_HANDOFF_MAP").ok().is_some_and(|m| i.prompt.as_deref() == Some(crate::control::handoff_prompt(&m).as_str()));
+                let internal = env::var("COMPACTVETERAN_HANDOFF_MAP")
+                    .ok()
+                    .is_some_and(|m| {
+                        i.prompt.as_deref() == Some(crate::control::handoff_prompt(&m).as_str())
+                    });
                 let mut i = i;
-                if internal { i.prompt = None; }
+                if internal {
+                    i.prompt = None;
+                }
                 if let Err(e) = state::merge_hook(&i) {
                     println!(
                         "{}",
