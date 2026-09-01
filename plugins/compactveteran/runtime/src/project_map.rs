@@ -39,10 +39,11 @@ fn clip(s: &str, max: usize) -> String {
 pub fn write(r: &Path, h: &str, s: &state::SessionState) -> io::Result<PathBuf> {
     let project = state::load_project(h)?.unwrap_or_default();
     let t = s.transcript_path.clone().unwrap_or_default();
-    let th = if !t.is_empty() && Path::new(&t).is_file() {
-        dh(&fs::read(&t)?)
+    let (tb, th) = if !t.is_empty() && Path::new(&t).is_file() {
+        let b = fs::read(&t)?;
+        (b.len(), dh(&b))
     } else {
-        "missing".into()
+        (0, "missing".into())
     };
     let branch = g(r, &["branch", "--show-current"])?;
     let head = g(r, &["rev-parse", "HEAD"])?;
@@ -59,7 +60,7 @@ pub fn write(r: &Path, h: &str, s: &state::SessionState) -> io::Result<PathBuf> 
         .filter(|x| !x.is_empty())
         .or(s.last_assistant_message.as_deref())
         .unwrap_or("");
-    let mut x = format!("# CompactVeteran handoff\n\n## Scope\n\n- canonical root: {}\n- branch: {}\n- HEAD: {}\n- clean: {}\n- current session: {}\n- transcript: {}\n- transcript SHA256: {}\n\n## Objective\n\n{}\n\n## Cursor\n\n{}\n\n## Next action\n\nContinue the Objective from the Cursor at local HEAD. Use listed project sources only as needed. Open the raw transcript only for a specific unresolved ambiguity.\n\n## Recent commits\n\n```text\n{}\n```\n\n## Sources\n\n", r.display(), branch, head, clean, s.session_id, t, th, clip(objective, 6000), clip(cursor, 4000), g(r, &["log", "-5", "--oneline"])?);
+    let mut x = format!("# CompactVeteran handoff\n\n## Scope\n\n- canonical root: {}\n- branch: {}\n- HEAD: {}\n- clean: {}\n- current session: {}\n- transcript: {}\n- transcript prefix bytes: {}\n- transcript prefix SHA256: {}\n\n## Objective\n\n{}\n\n## Cursor\n\n{}\n\n## Next action\n\nContinue the Objective from the Cursor at local HEAD. Use listed project sources only as needed. Open the raw transcript only for a specific unresolved ambiguity.\n\n## Recent commits\n\n```text\n{}\n```\n\n## Sources\n\n", r.display(), branch, head, clean, s.session_id, t, tb, th, clip(objective, 6000), clip(cursor, 4000), g(r, &["log", "-5", "--oneline"])?);
     for name in ["AGENTS.md", "ROADMAP.md", "PRODUCT_ROADMAP.md", "README.md"] {
         if r.join(name).exists() {
             x.push_str(&format!("- {}\n", r.join(name).display()));
@@ -71,7 +72,9 @@ pub fn write(r: &Path, h: &str, s: &state::SessionState) -> io::Result<PathBuf> 
     }
     x.push_str("\n## Recovery pointers\n\n- transcript: ");
     x.push_str(&t);
-    x.push_str("\n- transcript SHA256: ");
+    x.push_str("\n- transcript prefix bytes: ");
+    x.push_str(&tb.to_string());
+    x.push_str("\n- transcript prefix SHA256: ");
     x.push_str(&th);
     x.push_str("\n\n### Session lineage\n\n");
     for z in project.sessions.iter().rev().take(3).rev() {

@@ -30,7 +30,7 @@ sh install.sh
 use Codex normally. Sol’s automatic compaction and `/compact` checkpoint the
 current Git pass, update one project map, and restart clean. Terra and Luna
 remain stock.
-The handoff capsule is generated without a model call; raw logs are fallback only.
+The handoff capsule is generated without a model call; its verified transcript prefix is the fallback pointer.
 Commits stay local; runtime checkpointing requires no remote or network. GitHub
 is used only for installation and releases.
 
