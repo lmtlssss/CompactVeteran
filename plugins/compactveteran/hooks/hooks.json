@@ -1,0 +1,9 @@
+{
+  "description": "Keep Sol context in Git and restart from a durable project map.",
+  "hooks": {
+    "UserPromptSubmit": [{"hooks":[{"type":"command","command":"${PLUGIN_DATA}/compactveteran prompt","timeout":10}]}],
+    "Stop": [{"matcher":"","hooks":[{"type":"command","command":"${PLUGIN_DATA}/compactveteran checkpoint","timeout":120}]}],
+    "PreCompact": [{"matcher":"auto|manual","hooks":[{"type":"command","command":"${PLUGIN_DATA}/compactveteran precompact","timeout":120}]}],
+    "SessionStart": [{"matcher":"startup|resume","hooks":[{"type":"command","command":"${PLUGIN_DATA}/compactveteran checkpoint","timeout":120,"async":true}]}]
+  }
+}

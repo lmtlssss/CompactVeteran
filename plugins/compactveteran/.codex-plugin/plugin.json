@@ -1,0 +1,18 @@
+{
+  "name": "compactveteran",
+  "version": "0.1.0",
+  "description": "Keep Sol context in Git and restart clean.",
+  "author": {
+    "name": "Local developer"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "CompactVeteran",
+    "shortDescription": "Keep Sol context in Git.",
+    "longDescription": "Checkpoint Sol before compaction and continue from a durable project map.",
+    "developerName": "Local developer",
+    "category": "Productivity",
+    "capabilities": [],
+    "defaultPrompt": "Help me use Compactveteran."
+  }
+}
