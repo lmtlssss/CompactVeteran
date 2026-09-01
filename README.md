@@ -6,9 +6,9 @@ no context left behind.
 SOL
   │
   ├─ checkpoint Git + map
-  ├─ dodge compaction
-  │    ├─ Context compaction dodged.
-  │    └─ continue from zero
+  └─ dodge compaction
+       ├─ Context compaction dodged.
+       └─ continue from zero
 ```
 
 ## install
@@ -40,5 +40,5 @@ curl -fsSL https://raw.githubusercontent.com/lmtlssss/CompactVeteran/main/uninst
 ## build
 
 ```bash
-cargo test --locked --manifest-path plugins/compactveteran/runtime/Cargo.toml
+scripts/prove-system.sh
 ```

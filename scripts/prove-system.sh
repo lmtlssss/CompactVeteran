@@ -5,7 +5,10 @@ for tool in cargo git python3 timeout; do command -v "$tool" >/dev/null || exit 
 cargo build --locked --manifest-path "$root/plugins/compactveteran/runtime/Cargo.toml" --quiet
 for f in "$root/.agents/plugins/marketplace.json" "$root/plugins/compactveteran/.codex-plugin/plugin.json" "$root/plugins/compactveteran/hooks/hooks.json"; do python3 -m json.tool "$f" >/dev/null; done
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
-export HOME="$tmp/home" CODEX_HOME="$HOME/.codex" XDG_STATE_HOME="$HOME/.local/state" PATH="$HOME/.local/bin:$PATH"
+export HOME="$tmp/home"
+export CODEX_HOME="$HOME/.codex" XDG_STATE_HOME="$HOME/.local/state" PATH="$HOME/.local/bin:$PATH"
+[[ "$HOME" == "$tmp/home" && "$CODEX_HOME" == "$tmp/home/.codex" && "$XDG_STATE_HOME" == "$tmp/home/.local/state" ]] || { echo 'proof isolation failed' >&2; exit 1; }
+[[ "$HOME" == "$tmp/"* && "$CODEX_HOME" == "$tmp/"* && "$XDG_STATE_HOME" == "$tmp/"* ]] || { echo 'proof paths escaped temp root' >&2; exit 1; }
 export PROOF_TMP="$tmp/proof" PROJECT_ROOT="$root" PROOF_REMOTE="$tmp/remote.git"
 mkdir -p "$PROOF_TMP"
 export FIXTURE_STATE="$XDG_STATE_HOME/fixture" FIXTURE_PLUGIN_ROOT="$root/plugins/compactveteran" FIXTURE_PLUGIN_BIN="$root/plugins/compactveteran/runtime/target/debug/compactveteran" FIXTURE_REPO="$tmp/repo" FIXTURE_CURRENT_LINK="$CODEX_HOME/packages/standalone/current" FIXTURE_V2_TARGET="$CODEX_HOME/packages/standalone/releases/v2"
