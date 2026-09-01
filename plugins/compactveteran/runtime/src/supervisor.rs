@@ -51,7 +51,7 @@ fn launch(
             r.cwd.clone().into(),
             OsString::from("--model"),
             r.model.clone().into(),
-            OsString::from(handoff_prompt(&r.map)),
+            OsString::from(handoff_prompt(&r.map)?),
         ]);
         c.env("COMPACTVETERAN_HANDOFF_MAP", &r.map);
     } else {

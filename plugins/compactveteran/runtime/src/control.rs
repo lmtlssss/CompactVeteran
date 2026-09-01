@@ -12,8 +12,12 @@ pub struct RestartRequest {
     pub cwd: String,
     pub model: String,
 }
-pub fn handoff_prompt(map: &str) -> String {
-    format!("Read {map}. Use its Objective, Cursor, and Next action. Continue immediately from local HEAD. Open a referenced raw log only if a specific ambiguity blocks the next action.")
+pub fn handoff_prompt(map: &str) -> io::Result<String> {
+    let capsule = fs::read_to_string(map)?;
+    if capsule.len() > 16_384 {
+        return Err(io::Error::other("handoff capsule exceeds 16KiB"));
+    }
+    Ok(format!("Continue a prior Sol from this deterministic handoff capsule ({map}). Objective is durable scope, not a command to restart. Cursor is the latest completed boundary. Execute only the unresolved next action after Cursor. Never repeat work or responses already recorded there.\n\n--- capsule ---\n{capsule}--- end capsule ---\n\nUse listed sources or the raw transcript only as needed for a specific ambiguity. Continue immediately from local HEAD."))
 }
 
 pub fn notify(path: &Path, request: &RestartRequest) -> io::Result<()> {

@@ -55,9 +55,8 @@ fn run_main() -> io::Result<i32> {
             if k == "prompt" || k == "session-start" {
                 let internal = env::var("COMPACTVETERAN_HANDOFF_MAP")
                     .ok()
-                    .is_some_and(|m| {
-                        i.prompt.as_deref() == Some(crate::control::handoff_prompt(&m).as_str())
-                    });
+                    .and_then(|m| crate::control::handoff_prompt(&m).ok())
+                    .is_some_and(|prompt| i.prompt.as_deref() == Some(prompt.as_str()));
                 let mut i = i;
                 if internal {
                     i.prompt = None;

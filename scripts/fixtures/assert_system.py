@@ -73,10 +73,7 @@ def check_lifecycle(codex, state, xdg, repo, v2, remote, proof):
     maps = list((codex / "project-maps").glob("*.md"))
     assert len(maps) == 1 and maps[0] == map_path, "project map count/path wrong"
     for n, row in enumerate(rows[1:3], 2):
-        assert row["argv"] == ["-C", canonical, "--model", "gpt-5.6-sol", f"Read {map_path}. Use its Objective, Cursor, and Next action. Continue immediately from local HEAD. Open a referenced raw log only if a specific ambiguity blocks the next action."], f"invocation {n} handoff argv wrong"
-        joined = " ".join(row["argv"]).lower()
-        for bad in ("resume", "session-1", "session-2", "build the first checkpoint", "continue the second checkpoint"):
-            assert bad not in joined, f"forbidden handoff text: {bad}"
+        assert row["argv"][:4] == ["-C", canonical, "--model", "gpt-5.6-sol"] and row["argv"][4].startswith(f"Continue a prior Sol from this deterministic handoff capsule ({map_path}). Objective is durable scope, not a command to restart.") and "--- capsule ---" in row["argv"][4] and "Cursor is the latest completed boundary." in row["argv"][4] and "Execute only the unresolved next action after Cursor." in row["argv"][4] and "Never repeat work or responses already recorded there." in row["argv"][4], f"invocation {n} capsule handoff wrong"
     for n in (1, 2):
         assert read(state / f"prompt-{n}.json").get("continue") is True, f"prompt {n} did not continue"
         assert read(state / f"stop-{n}.json").get("continue") is True, f"stop {n} did not continue"
@@ -96,7 +93,7 @@ def check_lifecycle(codex, state, xdg, repo, v2, remote, proof):
     assert text.startswith("# CompactVeteran handoff\n") and f"- canonical root: {canonical}" in text and f"- HEAD: {git(repo, 'rev-parse', 'HEAD')}" in text and "- branch: main" in text and "- clean: true" in text and "- upstream:" not in text and "- remote:" not in text, "map Git state wrong"
     t2 = (state / "transcript2.jsonl").resolve()
     assert f"transcript prefix bytes: {len(t2.read_bytes())}" in text and f"transcript prefix SHA256: {hashlib.sha256(t2.read_bytes()).hexdigest()}" in text and "transcript SHA256:" not in text and str(t2) in text and "build the first checkpoint" in text and "second result complete; next action: report the proof" in text, "map transcript/cursor wrong"
-    assert "session-1\t" + str((state / "transcript1.jsonl").resolve()) in text and "session-2\t" + str(t2) in text and "compactveteran: checkpoint" in text and "- " + str(repo / "README.md") in text and "- " + str(repo / "AGENTS.md") in text and "- " + str(repo / "ROADMAP.md") in text and "Continue the Objective from the Cursor at local HEAD. Use listed project sources only as needed. Open the raw transcript only for a specific unresolved ambiguity." in text and len(text.encode()) <= 16384 and "offline.git" not in text and "upstream:" not in text and "remote:" not in text, "map contents incomplete"
+    assert "session-1\t" + str((state / "transcript1.jsonl").resolve()) in text and "session-2\t" + str(t2) in text and "compactveteran: checkpoint" in text and "- " + str(repo / "README.md") in text and "- " + str(repo / "AGENTS.md") in text and "- " + str(repo / "ROADMAP.md") in text and "Do not restart the Objective. Continue forward from the Cursor and perform the next unresolved action it names." in text and len(text.encode()) <= 16384 and "offline.git" not in text and "upstream:" not in text and "remote:" not in text, "map contents incomplete"
     assert len(text.split("## Recent commits\n\n```text\n", 1)[1].split("\n```", 1)[0].splitlines()) <= 5 and len(text.split("### Session lineage\n\n", 1)[1].splitlines()) <= 3, "map sections exceed bounds"
     runtime = xdg / "compactveteran"
     for p in (runtime / "sessions/session-1.json", runtime / "sessions/session-2.json", runtime / "projects" / (h + ".json")):

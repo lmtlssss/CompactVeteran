@@ -60,7 +60,7 @@ pub fn write(r: &Path, h: &str, s: &state::SessionState) -> io::Result<PathBuf> 
         .filter(|x| !x.is_empty())
         .or(s.last_assistant_message.as_deref())
         .unwrap_or("");
-    let mut x = format!("# CompactVeteran handoff\n\n## Scope\n\n- canonical root: {}\n- branch: {}\n- HEAD: {}\n- clean: {}\n- current session: {}\n- transcript: {}\n- transcript prefix bytes: {}\n- transcript prefix SHA256: {}\n\n## Objective\n\n{}\n\n## Cursor\n\n{}\n\n## Next action\n\nContinue the Objective from the Cursor at local HEAD. Use listed project sources only as needed. Open the raw transcript only for a specific unresolved ambiguity.\n\n## Recent commits\n\n```text\n{}\n```\n\n## Sources\n\n", r.display(), branch, head, clean, s.session_id, t, tb, th, clip(objective, 6000), clip(cursor, 4000), g(r, &["log", "-5", "--oneline"])?);
+    let mut x = format!("# CompactVeteran handoff\n\n## Scope\n\n- canonical root: {}\n- branch: {}\n- HEAD: {}\n- clean: {}\n- current session: {}\n- transcript: {}\n- transcript prefix bytes: {}\n- transcript prefix SHA256: {}\n\n## Objective\n\n{}\n\n## Cursor\n\n{}\n\n## Next action\n\nDo not restart the Objective. Continue forward from the Cursor and perform the next unresolved action it names. Use listed project sources or the raw transcript only as needed for a specific ambiguity.\n\n## Recent commits\n\n```text\n{}\n```\n\n## Sources\n\n", r.display(), branch, head, clean, s.session_id, t, tb, th, clip(objective, 6000), clip(cursor, 4000), g(r, &["log", "-5", "--oneline"])?);
     for name in ["AGENTS.md", "ROADMAP.md", "PRODUCT_ROADMAP.md", "README.md"] {
         if r.join(name).exists() {
             x.push_str(&format!("- {}\n", r.join(name).display()));
