@@ -77,7 +77,7 @@ fn rpc(trusted: Option<bool>) -> io::Result<Vec<(String, String, bool)>> {
     };
     send(
         &mut i,
-        json!({"id":1,"method":"initialize","params":{"clientInfo":{"name":"compactveteran","version":"0.1.2"}}}),
+        json!({"id":1,"method":"initialize","params":{"clientInfo":{"name":"compactveteran","version":"0.1.3"}}}),
     )?;
     send(&mut i, json!({"method":"initialized","params":{}}))?;
     read(1)?;
@@ -91,10 +91,10 @@ fn rpc(trusted: Option<bool>) -> io::Result<Vec<(String, String, bool)>> {
         .ok_or_else(|| io::Error::other("no hooks"))?;
     let mut edits = Vec::new();
     let mut out = Vec::new();
-    for n in ["UserPromptSubmit", "Stop", "PreCompact", "SessionStart"] {
+    for (n, wire) in [("UserPromptSubmit", "userPromptSubmit"), ("Stop", "stop"), ("PreCompact", "preCompact"), ("SessionStart", "sessionStart")] {
         let h = hs
             .iter()
-            .find(|h| h["pluginId"] == "compactveteran@compactveteran" && h["eventName"] == n)
+            .find(|h| h["pluginId"] == "compactveteran@compactveteran" && h["eventName"] == wire)
             .ok_or_else(|| io::Error::other(format!("missing {n}")))?;
         let k = h["key"]
             .as_str()
