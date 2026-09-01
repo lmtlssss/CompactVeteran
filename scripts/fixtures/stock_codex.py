@@ -128,7 +128,7 @@ def invoke(kind, count, version, session, turn, transcript, prompt=None):
     atomic(STATE / f"{kind}-{count}.json", json.dumps(output, indent=2) + "\n")
 
 
-def invoke_model(kind, model, name):
+def invoke_model(model, name):
     payload = {"hook_event_name": "PreCompact", "model": model, "session_id": f"{model}-session", "turn_id": "bypass", "cwd": str(REPO), "transcript_path": str(STATE / f"{name}.jsonl"), "trigger": "manual", "count": 1}
     result = subprocess.run([str(PLUGIN_BIN), "hook", "precompact"], input=json.dumps(payload), text=True, capture_output=True, env=os.environ.copy())
     atomic(STATE / f"{name}.json", result.stdout)
@@ -149,10 +149,12 @@ def interactive():
     transcript = STATE / f"transcript{inv}.jsonl"
     atomic(transcript, (f"{{\"session_id\":\"session-{inv}\",\"turn_id\":\"turn-{inv}\"}}\n").encode(), binary=True)
     session, turn = f"session-{inv}", f"turn-{inv}"
-    invoke("session-start", inv, version, session, turn, transcript)
+    session_payload = {"hook_event_name": "SessionStart", "model": "gpt-5.6-sol", "session_id": session, "cwd": str(REPO), "transcript_path": str(transcript), "source": "startup", "permission_mode": "default"}
+    session_result = subprocess.run([str(PLUGIN_BIN), "hook", "session-start"], input=json.dumps(session_payload), text=True, capture_output=True, env=os.environ.copy())
+    atomic(STATE / f"session-start-{inv}.json", json.dumps(json.loads(session_result.stdout), indent=2) + "\n")
     if inv == 1:
-        invoke_model("precompact", "gpt-5.6-terra", "terra-bypass")
-        invoke_model("precompact", "gpt-5.6-luna", "luna-bypass")
+        invoke_model("gpt-5.6-terra", "terra-bypass")
+        invoke_model("gpt-5.6-luna", "luna-bypass")
     invoke("prompt", inv, version, session, turn, transcript, f"build the first checkpoint" if inv == 1 else "continue the second checkpoint")
     atomic(REPO / ("work-one.txt" if inv == 1 else "work-two.txt"), f"checkpoint {inv}\n")
     invoke("stop", inv, version, session, turn, transcript)

@@ -7,14 +7,22 @@ SOL
   │
   ├─ checkpoint Git + map
   ├─ dodge compaction
-    ├─ Context compaction dodged.
-    └─ continue from zero
+  │    ├─ Context compaction dodged.
+  │    └─ continue from zero
 ```
 
 ## install
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/lmtlssss/CompactVeteran/main/install.sh | sh
+```
+
+inspect first:
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/lmtlssss/CompactVeteran/main/install.sh
+less install.sh
+sh install.sh
 ```
 
 ## usage
@@ -32,5 +40,5 @@ curl -fsSL https://raw.githubusercontent.com/lmtlssss/CompactVeteran/main/uninst
 ## build
 
 ```bash
-scripts/prove-system.sh
+cargo test --locked --manifest-path plugins/compactveteran/runtime/Cargo.toml
 ```
