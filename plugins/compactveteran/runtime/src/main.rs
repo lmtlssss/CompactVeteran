@@ -29,7 +29,8 @@ fn digest(b: &[u8]) -> String {
 }
 fn run_main() -> io::Result<i32> {
     let mut a = env::args_os().skip(1);
-    match a.next().as_deref() {
+    let command = a.next().and_then(|x| x.into_string().ok());
+    match command.as_deref() {
         Some("refresh-catalog") => {
             catalog::refresh().map(|p| println!("{}", p.display()))?;
         }
