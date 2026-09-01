@@ -77,7 +77,7 @@ fn rpc(trusted: Option<bool>) -> io::Result<Vec<(String, String, bool)>> {
     };
     send(
         &mut i,
-        json!({"id":1,"method":"initialize","params":{"clientInfo":{"name":"compactveteran","version":"0.1.3"}}}),
+        json!({"id":1,"method":"initialize","params":{"clientInfo":{"name":"compactveteran","version":"0.1.4"}}}),
     )?;
     send(&mut i, json!({"method":"initialized","params":{}}))?;
     read(1)?;
@@ -107,7 +107,7 @@ fn rpc(trusted: Option<bool>) -> io::Result<Vec<(String, String, bool)>> {
         out.push((
             k.clone(),
             hash.clone(),
-            h["enabled"].as_bool().unwrap_or(false) && h["trustedHash"] == h["currentHash"],
+            h["enabled"].as_bool().unwrap_or(false) && h["trustStatus"] == "trusted",
         ));
         edits.push(if trusted == Some(true){json!({"keyPath":format!("hooks.state.\"{k}\""),"value":{"enabled":true,"trusted_hash":hash},"mergeStrategy":"upsert"})}else{json!({"keyPath":format!("hooks.state.\"{k}\""),"value":null,"mergeStrategy":"replace"})});
     }

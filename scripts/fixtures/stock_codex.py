@@ -93,7 +93,7 @@ def app_server():
             cwds = request.get("params", {}).get("cwds", [str(REPO)])
             cwd = cwds[0] if cwds else str(REPO)
             events = [("userPromptSubmit", "UserPromptSubmit"), ("stop", "Stop"), ("preCompact", "PreCompact"), ("sessionStart", "SessionStart")]
-            hooks = [{"eventName": wire, "pluginId": "compactveteran@compactveteran", "key": "cv-" + key.lower(), "currentHash": "hash-" + key.lower(), "enabled": hook_state.get(key, {}).get("enabled", False), "trustedHash": hook_state.get(key, {}).get("trusted_hash", None)} for wire, key in events]
+            hooks = [{"eventName": wire, "pluginId": "compactveteran@compactveteran", "key": "cv-" + key.lower(), "currentHash": "hash-" + key.lower(), "enabled": hook_state.get(key, {}).get("enabled", False), "trustedHash": None, "trustStatus": "trusted" if hook_state.get(key, {}).get("trusted_hash") == "hash-" + key.lower() else "untrusted"} for wire, key in events]
             response = {"jsonrpc": "2.0", "id": ident, "result": {"data": [{"cwd": cwd, "hooks": hooks}]}}
         elif method == "config/batchWrite":
             for edit in request.get("params", {}).get("edits", []):
