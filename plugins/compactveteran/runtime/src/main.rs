@@ -3,6 +3,7 @@ mod catalog;
 mod config;
 mod git_checkpoint;
 mod hook_input;
+mod project_lock;
 mod project_map;
 mod state;
 use hook_input::HookInput;

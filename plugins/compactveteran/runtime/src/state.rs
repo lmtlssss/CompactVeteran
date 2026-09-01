@@ -68,7 +68,7 @@ pub fn merge_hook(i: &HookInput) -> io::Result<SessionState> {
     )?;
     Ok(s)
 }
-pub fn record_project_session(h: &str, s: &SessionState) -> io::Result<()> {
+pub fn record_project_session(root: &str, h: &str, s: &SessionState) -> io::Result<()> {
     let p = dir().join("projects").join(format!("{h}.json"));
     let mut x: ProjectState = if p.exists() {
         serde_json::from_slice(&fs::read(&p)?)?
@@ -83,7 +83,7 @@ pub fn record_project_session(h: &str, s: &SessionState) -> io::Result<()> {
             transcript_path: s.transcript_path.clone(),
         })
     }
-    x.canonical_root = s.cwd.clone().unwrap_or_default();
+    x.canonical_root = root.into();
     atomic::write(&p, &serde_json::to_vec_pretty(&x).unwrap())
 }
 pub fn save(i: &HookInput) -> io::Result<()> {

@@ -1,32 +1,52 @@
-use crate::{atomic, home, hook_input::HookInput};
+use crate::{atomic, home, hook_input::HookInput, state};
 use sha2::{Digest, Sha256};
 use std::{
     fs, io,
     path::{Path, PathBuf},
     process::Command,
 };
-fn g(r: &Path, a: &[&str]) -> String {
-    String::from_utf8_lossy(
-        &Command::new("git")
-            .arg("-C")
-            .arg(r)
-            .args(a)
-            .output()
-            .unwrap()
-            .stdout,
-    )
-    .trim()
-    .into()
+fn g(r: &Path, a: &[&str]) -> io::Result<String> {
+    let o = Command::new("git").arg("-C").arg(r).args(a).output()?;
+    if !o.status.success() {
+        return Err(io::Error::other(
+            String::from_utf8_lossy(&o.stderr).trim().to_owned(),
+        ));
+    }
+    Ok(String::from_utf8_lossy(&o.stdout).trim().into())
 }
-pub fn write(r: &Path, i: &HookInput) -> io::Result<PathBuf> {
+fn dh(b: &[u8]) -> String {
     let mut h = Sha256::new();
-    h.update(r.to_string_lossy().as_bytes());
-    let p = home()
-        .join("project-maps")
-        .join(format!("{:x}.md", h.finalize()));
-    let tr = i.transcript_path.clone().unwrap_or_default();
-    let b = fs::read(&tr).unwrap_or_default();
-    let txt=format!("# CompactVeteran\n\n- root: {}\n- remote: {}\n- branch: {}\n- upstream: {}\n- HEAD: {}\n- status: {}\n- transcript: {}\n- transcript_sha256: {}\n- session_lineage: {}\n- latest_user_directive:\n```\n{}\n```\n\n## recent commits\n{}\n\n## resume\nRead this map, inspect Git and referenced raw logs, and continue the unfinished work from HEAD.\n",r.display(),g(r,&["remote","-v"]),g(r,&["branch","--show-current"]),g(r,&["rev-parse","--abbrev-ref","--symbolic-full-name","@{u"]),g(r,&["rev-parse","HEAD"]),g(r,&["status","--porcelain","--untracked-files=all"]),tr,crate::digest(&b),i.session_id.clone().unwrap_or_default(),i.prompt.clone().unwrap_or_default(),g(r,&["log","-10","--oneline"]));
-    atomic::write(&p, txt.as_bytes())?;
+    h.update(b);
+    format!("{:x}", h.finalize())
+}
+pub fn write(r: &Path, h: &str, s: &state::SessionState) -> io::Result<PathBuf> {
+    let t = s.transcript_path.clone().unwrap_or_default();
+    let th = if !t.is_empty() && Path::new(&t).is_file() {
+        dh(&fs::read(&t)?)
+    } else {
+        "missing".into()
+    };
+    let u = g(
+        r,
+        &["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
+    )
+    .unwrap_or_else(|_| "none".into());
+    let clean = g(r, &["status", "--porcelain", "--untracked-files=all"])?.is_empty();
+    let mut x=format!("# CompactVeteran\n\n## Git\n\n- canonical root: {}\n- branch: {}\n- HEAD: {}\n- upstream: {}\n- clean: {}\n\n```text\n{}\n```\n\n## Chat\n\n- current session id: {}\n- transcript: {}\n- transcript SHA256: {}\n\n## Latest directive\n\n",r.display(),g(r,&["branch","--show-current"] )?,g(r,&["rev-parse","HEAD"] )?,u,clean,g(r,&["remote","-v"] )?,s.session_id,t,th);
+    let f = if s.latest_prompt.as_deref().unwrap_or("").contains("```") {
+        "````"
+    } else {
+        "```"
+    };
+    x += f;
+    x.push_str("text\n");
+    x.push_str(s.latest_prompt.as_deref().unwrap_or(""));
+    x.push('\n');
+    x += f;
+    x.push_str("\n\n## Recent commits\n\n```text\n");
+    x += &g(r, &["log", "-10", "--oneline"])?;
+    x.push_str("\n```\n\n## Resume\n\nRead this map. Treat it as a map, inspect Git and the referenced raw logs, and continue the unfinished work from HEAD.\n");
+    let p = home().join("project-maps").join(format!("{h}.md"));
+    atomic::write(&p, x.as_bytes())?;
     Ok(p)
 }
