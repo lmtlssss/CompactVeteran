@@ -6,6 +6,7 @@ use std::{
     os::unix::fs::PermissionsExt,
     path::PathBuf,
     process::{Command, Stdio},
+    sync::mpsc,
     time::Duration,
 };
 fn stock() -> io::Result<PathBuf> {
@@ -23,21 +24,53 @@ fn rpc(trusted: Option<bool>) -> io::Result<Vec<(String, String, bool)>> {
         .stderr(Stdio::null())
         .spawn()?;
     let mut i = c.stdin.take().ok_or_else(|| io::Error::other("stdin"))?;
-    let mut o = BufReader::new(c.stdout.take().ok_or_else(|| io::Error::other("stdout"))?);
+    let stdout = c.stdout.take().ok_or_else(|| io::Error::other("stdout"))?;
+    let (tx, rx) = mpsc::channel();
+    std::thread::spawn(move || {
+        let mut reader = BufReader::new(stdout);
+        let mut line = String::new();
+        loop {
+            line.clear();
+            match reader.read_line(&mut line) {
+                Ok(0) => {
+                    let _ = tx.send(Err(io::Error::other("app-server closed")));
+                    break;
+                }
+                Ok(_) => match serde_json::from_str::<Value>(&line) {
+                    Ok(v) => {
+                        if tx.send(Ok(v)).is_err() {
+                            break;
+                        }
+                    }
+                    Err(e) => {
+                        let _ = tx.send(Err(io::Error::other(e)));
+                        break;
+                    }
+                },
+                Err(e) => {
+                    let _ = tx.send(Err(e));
+                    break;
+                }
+            }
+        }
+    });
     let send = |i: &mut std::process::ChildStdin, v: Value| -> io::Result<()> {
         serde_json::to_writer(&mut *i, &v).map_err(io::Error::other)?;
         i.write_all(b"\n")?;
         i.flush()
     };
-    let read = |o: &mut BufReader<_>, id: u64| -> io::Result<Value> {
-        let mut l = String::new();
+    let read = |id: u64| -> io::Result<Value> {
         loop {
-            l.clear();
-            if o.read_line(&mut l)? == 0 {
-                return Err(io::Error::other("app-server closed"));
-            };
-            let v: Value = serde_json::from_str(&l).map_err(io::Error::other)?;
+            let v = rx
+                .recv_timeout(Duration::from_secs(10))
+                .map_err(|e| io::Error::other(format!("app-server response: {e}")))??;
             if v["id"].as_u64() == Some(id) {
+                if let Some(error) = v.get("error") {
+                    return Err(io::Error::other(error.to_string()));
+                }
+                if v.get("result").is_none() {
+                    return Err(io::Error::other("response missing result"));
+                }
                 return Ok(v);
             }
         }
@@ -46,13 +79,13 @@ fn rpc(trusted: Option<bool>) -> io::Result<Vec<(String, String, bool)>> {
         &mut i,
         json!({"id":1,"method":"initialize","params":{"clientInfo":{"name":"compactveteran","version":"0.1.0"}}}),
     )?;
-    read(&mut o, 1)?;
+    read(1)?;
     send(&mut i, json!({"method":"initialized","params":{}}))?;
     send(
         &mut i,
         json!({"id":2,"method":"hooks/list","params":{"cwds":[env::current_dir()?.display().to_string()]}}),
     )?;
-    let v = read(&mut o, 2)?;
+    let v = read(2)?;
     let hs = v["result"]["data"][0]["hooks"]
         .as_array()
         .ok_or_else(|| io::Error::other("no hooks"))?;
@@ -83,11 +116,10 @@ fn rpc(trusted: Option<bool>) -> io::Result<Vec<(String, String, bool)>> {
             &mut i,
             json!({"id":3,"method":"config/batchWrite","params":{"edits":edits,"reloadUserConfig":true}}),
         )?;
-        read(&mut o, 3)?;
+        read(3)?;
     }
     let _ = c.kill();
     let _ = c.wait();
-    std::thread::sleep(Duration::from_millis(1));
     Ok(out)
 }
 pub fn set(t: bool) -> io::Result<()> {
