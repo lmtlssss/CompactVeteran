@@ -1,11 +1,13 @@
-use crate::home;
+use crate::{catalog, config, home};
+use serde_json::{json, Value};
 use std::{
-    env, fs, io,
+    env, fs,
+    io::{self, BufRead, BufReader, Write},
     os::unix::fs::PermissionsExt,
     path::PathBuf,
     process::{Command, Stdio},
+    time::Duration,
 };
-
 fn stock() -> io::Result<PathBuf> {
     let p = fs::canonicalize(home().join("packages/standalone/current/bin/codex"))?;
     if p == fs::canonicalize(env::current_exe()?)? {
@@ -13,38 +15,88 @@ fn stock() -> io::Result<PathBuf> {
     }
     Ok(p)
 }
-pub fn set(_trusted: bool) -> io::Result<()> {
-    let p = stock()?;
-    let mut c = Command::new(p);
-    c.args(["app-server", "--stdio"])
+fn rpc(trusted: Option<bool>) -> io::Result<Vec<(String, String, bool)>> {
+    let mut c = Command::new(stock()?)
+        .args(["app-server", "--stdio"])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null());
-    let mut child = c.spawn()?;
-    let mut input = child
-        .stdin
-        .take()
-        .ok_or_else(|| io::Error::other("app-server stdin"))?;
-    use std::io::Write;
-    writeln!(
-        input,
-        "{{\"id\":1,\"method\":\"initialize\",\"params\":{{}}}}"
+        .stderr(Stdio::null())
+        .spawn()?;
+    let mut i = c.stdin.take().ok_or_else(|| io::Error::other("stdin"))?;
+    let mut o = BufReader::new(c.stdout.take().ok_or_else(|| io::Error::other("stdout"))?);
+    let send = |i: &mut std::process::ChildStdin, v: Value| -> io::Result<()> {
+        serde_json::to_writer(&mut *i, &v).map_err(io::Error::other)?;
+        i.write_all(b"\n")?;
+        i.flush()
+    };
+    let read = |o: &mut BufReader<_>, id: u64| -> io::Result<Value> {
+        let mut l = String::new();
+        loop {
+            l.clear();
+            if o.read_line(&mut l)? == 0 {
+                return Err(io::Error::other("app-server closed"));
+            };
+            let v: Value = serde_json::from_str(&l).map_err(io::Error::other)?;
+            if v["id"].as_u64() == Some(id) {
+                return Ok(v);
+            }
+        }
+    };
+    send(
+        &mut i,
+        json!({"id":1,"method":"initialize","params":{"clientInfo":{"name":"compactveteran","version":"0.1.0"}}}),
     )?;
-    writeln!(input, "{{\"method\":\"initialized\"}}")?;
-    writeln!(
-        input,
-        "{{\"id\":2,\"method\":\"hooks/list\",\"params\":{{\"cwd\":{}}}}}",
-        serde_json::to_string(&env::current_dir()?.display().to_string()).unwrap()
+    read(&mut o, 1)?;
+    send(&mut i, json!({"method":"initialized","params":{}}))?;
+    send(
+        &mut i,
+        json!({"id":2,"method":"hooks/list","params":{"cwds":[env::current_dir()?.display().to_string()]}}),
     )?;
-    input.flush()?;
-    drop(input);
-    let _ = child.wait();
-    Ok(())
+    let v = read(&mut o, 2)?;
+    let hs = v["result"]["data"][0]["hooks"]
+        .as_array()
+        .ok_or_else(|| io::Error::other("no hooks"))?;
+    let mut edits = Vec::new();
+    let mut out = Vec::new();
+    for n in ["UserPromptSubmit", "Stop", "PreCompact", "SessionStart"] {
+        let h = hs
+            .iter()
+            .find(|h| h["pluginId"] == "compactveteran@compactveteran" && h["eventName"] == n)
+            .ok_or_else(|| io::Error::other(format!("missing {n}")))?;
+        let k = h["key"]
+            .as_str()
+            .ok_or_else(|| io::Error::other("key"))?
+            .to_string();
+        let hash = h["currentHash"]
+            .as_str()
+            .ok_or_else(|| io::Error::other("hash"))?
+            .to_string();
+        out.push((
+            k.clone(),
+            hash.clone(),
+            h["enabled"].as_bool().unwrap_or(false) && h["trustedHash"] == h["currentHash"],
+        ));
+        edits.push(if trusted == Some(true){json!({"keyPath":format!("hooks.state.\"{k}\""),"value":{"enabled":true,"trusted_hash":hash},"mergeStrategy":"upsert"})}else{json!({"keyPath":format!("hooks.state.\"{k}\""),"value":null,"mergeStrategy":"replace"})});
+    }
+    if trusted.is_some() {
+        send(
+            &mut i,
+            json!({"id":3,"method":"config/batchWrite","params":{"edits":edits,"reloadUserConfig":true}}),
+        )?;
+        read(&mut o, 3)?;
+    }
+    let _ = c.kill();
+    let _ = c.wait();
+    std::thread::sleep(Duration::from_millis(1));
+    Ok(out)
+}
+pub fn set(t: bool) -> io::Result<()> {
+    rpc(Some(t)).map(|_| ())
 }
 pub fn doctor() -> io::Result<()> {
-    let stock = stock()?;
-    let exe = env::current_exe()?;
-    let data = env::var_os("PLUGIN_DATA")
+    let s = stock()?;
+    let e = env::current_exe()?;
+    let d = env::var_os("PLUGIN_DATA")
         .map(PathBuf::from)
         .unwrap_or_else(|| home().join("plugins/data/compactveteran-compactveteran"));
     let checks = [
@@ -52,12 +104,24 @@ pub fn doctor() -> io::Result<()> {
             "platform",
             cfg!(target_os = "linux") && cfg!(target_arch = "x86_64"),
         ),
-        ("stock", stock != fs::canonicalize(&exe)?),
-        ("binary", exe.metadata()?.permissions().mode() & 0o111 != 0),
-        ("data", data.is_dir()),
+        ("stock", s != fs::canonicalize(&e)?),
+        ("binary", e.metadata()?.permissions().mode() & 0o111 != 0),
+        ("data", d.is_dir()),
+        ("maps", home().join("project-maps").is_dir()),
         (
-            "maps",
-            fs::create_dir_all(home().join("project-maps")).is_ok(),
+            "hooks",
+            rpc(None)
+                .map(|x| x.len() == 4 && x.iter().all(|z| z.2))
+                .unwrap_or(false),
+        ),
+        ("catalog", catalog::refresh().is_ok()),
+        ("config", config::is_owned().unwrap_or(false)),
+        (
+            "launcher",
+            env::var_os("COMPACTVETERAN_EXPECT_LAUNCHER").is_some()
+                || fs::read_to_string(home().join("../.local/bin/codex"))
+                    .map(|x| x.contains("compactveteran"))
+                    .unwrap_or(false),
         ),
     ];
     for (n, ok) in checks {

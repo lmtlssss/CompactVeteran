@@ -92,3 +92,19 @@ pub fn status() -> io::Result<()> {
     );
     Ok(())
 }
+
+pub fn is_owned() -> io::Result<bool> {
+    let op = path();
+    if !op.exists() {
+        return Ok(false);
+    }
+    let own = fs::read_to_string(op)?
+        .parse::<DocumentMut>()
+        .map_err(|e| io::Error::other(e.to_string()))?;
+    let overlay = own["owned_overlay"].as_str().unwrap_or("");
+    let d = fs::read_to_string(home().join("config.toml"))
+        .unwrap_or_default()
+        .parse::<DocumentMut>()
+        .map_err(|e| io::Error::other(e.to_string()))?;
+    Ok(d["model_catalog_json"].as_str() == Some(overlay))
+}

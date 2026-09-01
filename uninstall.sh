@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
-home="${CODEX_HOME:-$HOME/.codex}"; data="$home/plugins/data/compactveteran-compactveteran"; state="${XDG_STATE_HOME:-$HOME/.local/state}/compactveteran/install"; [[ -x "$data/compactveteran" ]] && { "$data/compactveteran" untrust; "$data/compactveteran" restore-config; }
-if [[ -f "$state/original" ]]; then cp -p "$state/original" "$HOME/.local/bin/codex"; else ln -sfn "$home/packages/standalone/current/bin/codex" "$HOME/.local/bin/codex"; fi
-rm -rf "$data" "$state"; echo "CompactVeteran uninstalled; project maps preserved at $home/project-maps."
+h=${CODEX_HOME:-$HOME/.codex}; d=$h/plugins/data/compactveteran-compactveteran; s=${XDG_STATE_HOME:-$HOME/.local/state}/compactveteran/install; b=$HOME/.local/bin/codex
+stock=$h/packages/standalone/current/bin/codex
+if [[ -x $d/compactveteran ]]; then PLUGIN_DATA="$d" "$d/compactveteran" untrust || true; PLUGIN_DATA="$d" "$d/compactveteran" restore-config || true; fi
+"$stock" plugin remove compactveteran@compactveteran >/dev/null 2>&1 || true; "$stock" plugin marketplace remove compactveteran >/dev/null 2>&1 || true
+case $(cat "$s/kind" 2>/dev/null || echo missing) in symlink) rm -f "$b"; ln -s "$(cat "$s/target")" "$b";; file) rm -f "$b"; cp -p "$s/original" "$b";; *) rm -f "$b"; [[ -x $h/packages/standalone/current/bin/codex ]] && ln -s "$h/packages/standalone/current/bin/codex" "$b";; esac
+rm -rf "$d" "${XDG_STATE_HOME:-$HOME/.local/state}/compactveteran"; echo "CompactVeteran removed. Project maps preserved at $h/project-maps."

@@ -7,7 +7,8 @@ SOL
   │
   ├─ checkpoint Git + map
   ├─ dodge compaction
-  └─ continue from zero
+    ├─ Context compaction dodged.
+    └─ continue from zero
 ```
 
 ## install
@@ -20,17 +21,16 @@ curl -fsSL https://raw.githubusercontent.com/lmtlssss/CompactVeteran/main/instal
 
 use Codex normally. Sol’s automatic compaction and `/compact` checkpoint the
 current Git pass, update one project map, and restart clean. Terra and Luna
-remain stock. No context left behind.
+remain stock.
 
 ## uninstall
 
 ```bash
-./uninstall.sh
+curl -fsSL https://raw.githubusercontent.com/lmtlssss/CompactVeteran/main/uninstall.sh | sh
 ```
 
 ## build
 
 ```bash
-cargo check --manifest-path plugins/compactveteran/runtime/Cargo.toml
 scripts/prove-system.sh
 ```
