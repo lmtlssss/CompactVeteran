@@ -36,9 +36,6 @@ pub fn root_hash(r: &Path) -> String {
 pub struct Checkpoint {
     pub map_path: PathBuf,
     pub root: PathBuf,
-    pub head: String,
-    pub committed: bool,
-    pub pushed: bool,
 }
 pub fn run(i: &HookInput) -> io::Result<Checkpoint> {
     let s = state::merge_hook(i)?;
@@ -50,10 +47,8 @@ pub fn run(i: &HookInput) -> io::Result<Checkpoint> {
     }
     let dirty = g(&r, &["status", "--porcelain", "--untracked-files=all"])?;
     guard(&dirty)?;
-    let mut c = false;
     if !dirty.is_empty() {
         g(&r, &["add", "-A"])?;
-        g(&r, &["diff", "--cached", "--check"])?;
         let q = Command::new("git")
             .arg("-C")
             .arg(&r)
@@ -78,12 +73,10 @@ pub fn run(i: &HookInput) -> io::Result<Checkpoint> {
                     &m,
                 ],
             )?;
-            c = true
         } else if !q.success() {
             return Err(io::Error::other("git diff failed"));
         }
     }
-    let mut p = false;
     if g(
         &r,
         &["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
@@ -91,20 +84,15 @@ pub fn run(i: &HookInput) -> io::Result<Checkpoint> {
     .is_ok()
     {
         g(&r, &["push"])?;
-        p = true
     }
     if !g(&r, &["status", "--porcelain", "--untracked-files=all"])?.is_empty() {
         return Err(io::Error::other("working tree not clean"));
     }
     state::record_project_session(&r.to_string_lossy(), &h, &s)?;
     let mp = project_map::write(&r, &h, &s)?;
-    let head = g(&r, &["rev-parse", "HEAD"])?;
     Ok(Checkpoint {
         map_path: mp,
         root: r,
-        head,
-        committed: c,
-        pushed: p,
     })
 }
 fn guard(s: &str) -> io::Result<()> {

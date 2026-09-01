@@ -93,6 +93,3 @@ pub fn record_project_session(root: &str, h: &str, s: &SessionState) -> io::Resu
     x.canonical_root = root.into();
     atomic::write(&p, &serde_json::to_vec_pretty(&x).unwrap())
 }
-pub fn save(i: &HookInput) -> io::Result<()> {
-    merge_hook(i).map(|_| ())
-}

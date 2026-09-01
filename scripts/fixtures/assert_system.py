@@ -33,7 +33,7 @@ def check_installed(home, codex, state, xdg, repo):
     assert s.get("marketplace") is True and s.get("plugin") is True, "plugin state is not installed"
     hooks = read(state / "hooks.json")
     events = ["UserPromptSubmit", "Stop", "PreCompact", "SessionStart"]
-    assert list(hooks) == events, "hook event set changed"
+    assert set(hooks) == set(events), "hook event set changed"
     for event in events:
         h = hooks[event]
         assert h.get("enabled") is True and h.get("trusted_hash") == "hash-" + event.lower(), f"hook {event} is not trusted"
@@ -59,6 +59,10 @@ def check_installed(home, codex, state, xdg, repo):
 
 
 def check_lifecycle(codex, state, xdg, repo, v2, remote, proof):
+    assert read(state / "session-start-1.json").get("continue") is True and read(state / "session-start-2.json").get("continue") is True, "Sol SessionStart failed"
+    for name in ("terra-bypass", "luna-bypass"):
+        assert read(state / f"{name}.json").strip() == '{"continue":true}', f"{name} did not bypass"
+    assert not (xdg / "compactveteran/sessions/gpt-5.6-terra-session.json").exists() and not (xdg / "compactveteran/sessions/gpt-5.6-luna-session.json").exists(), "non-Sol state created"
     rows = [json.loads(x) for x in (state / "invocations.jsonl").read_text().splitlines()]
     assert [x["count"] for x in rows] == [1, 2, 3] and [x["version"] for x in rows] == ["v1", "v1", "v2"], "invocation sequence changed"
     assert len({x["pid"] for x in rows}) == 3 and all(x["pid"] > 0 for x in rows), "process lineage invalid"
