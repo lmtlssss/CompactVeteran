@@ -77,7 +77,7 @@ fn rpc(trusted: Option<bool>) -> io::Result<Vec<(String, String, bool)>> {
     };
     send(
         &mut i,
-        json!({"id":1,"method":"initialize","params":{"clientInfo":{"name":"compactveteran","version":"0.1.5"}}}),
+        json!({"id":1,"method":"initialize","params":{"clientInfo":{"name":"compactveteran","version":"0.1.6"}}}),
     )?;
     send(&mut i, json!({"method":"initialized","params":{}}))?;
     read(1)?;

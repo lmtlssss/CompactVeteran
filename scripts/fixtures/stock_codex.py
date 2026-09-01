@@ -120,7 +120,7 @@ def app_server():
 
 
 def invoke(kind, count, version, session, turn, transcript, prompt=None):
-    payload = {"hook_event_name": {"prompt": "UserPromptSubmit", "stop": "Stop", "precompact": "PreCompact", "session-start": "SessionStart"}[kind], "model": "gpt-5.6-sol", "session_id": session, "turn_id": turn, "cwd": str(REPO), "transcript_path": str(transcript)}
+    payload = {"hook_event_name": {"prompt": "UserPromptSubmit", "stop": "Stop", "precompact": "PreCompact", "session-start": "SessionStart"}[kind], "model": "gpt-5.6-sol", "session_id": session, "turn_id": turn, "cwd": str(REPO), "transcript_path": str(transcript), "last_assistant_message": f"assistant result {count}" if kind == "stop" else None}
     if prompt is not None:
         payload["prompt"] = prompt
     if kind == "precompact":

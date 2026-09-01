@@ -1,6 +1,6 @@
 use crate::{
     config,
-    control::{Listener, RestartRequest},
+    control::{handoff_prompt, Listener, RestartRequest},
     home,
 };
 use std::{
@@ -46,7 +46,8 @@ fn launch(
 ) -> io::Result<Child> {
     let mut c = Command::new(bin);
     if let Some(r) = req {
-        c.args([OsString::from("-C"),r.cwd.clone().into(),OsString::from("--model"),r.model.clone().into(),OsString::from(format!("Read {}. Treat it as a map, inspect Git and the referenced raw logs, and continue the unfinished work from HEAD.",r.map))]);
+        c.args([OsString::from("-C"),r.cwd.clone().into(),OsString::from("--model"),r.model.clone().into(),OsString::from(handoff_prompt(&r.map))]);
+        c.env("COMPACTVETERAN_HANDOFF_MAP", &r.map);
     } else {
         c.args(args);
     }
