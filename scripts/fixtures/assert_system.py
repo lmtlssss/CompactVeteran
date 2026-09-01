@@ -90,7 +90,7 @@ def check_lifecycle(codex, state, xdg, repo, v2, remote, proof):
             except UnicodeDecodeError: pass
     assert not git(repo, "status", "--porcelain") and all(git(repo, "ls-files", x) == x for x in ("work-one.txt", "work-two.txt")), "repository is not clean/tracked"
     assert git(repo, "rev-parse", "HEAD") != git_dir(remote, "rev-parse", "refs/heads/main"), "local HEAD did not diverge"
-    assert "compactveteran: checkpoint" not in git_dir(remote, "log", "--format=%s"), "remote received checkpoint"
+    assert "compactveteran: checkpoint" not in git_dir(remote, "log", "--format=%s", "refs/heads/main"), "remote received checkpoint"
     assert sum(x.startswith("compactveteran: checkpoint ") for x in git(repo, "log", "--format=%s").splitlines()) == 2, "checkpoint count wrong"
     text = map_path.read_text()
     assert f"- canonical root: {canonical}" in text and f"- HEAD: {git(repo, 'rev-parse', 'HEAD')}" in text and "- branch: main" in text and "- upstream: origin/main" in text and "- clean: true" in text, "map Git state wrong"
