@@ -72,13 +72,23 @@ def plugin(command):
 
 def app_server():
     hook_state = read_json("hooks.json", {})
+    initialized = False
+    pending_initialize = None
     for line in sys.stdin:
         request = json.loads(line)
         method, ident = request.get("method"), request.get("id")
         if method == "initialized":
+            initialized = True
+            if pending_initialize is not None:
+                sys.stdout.write(json.dumps(pending_initialize, separators=(",", ":")) + "\n")
+                sys.stdout.flush()
+                pending_initialize = None
             continue
         if method == "initialize":
             response = {"jsonrpc": "2.0", "id": ident, "result": {"protocolVersion": "1", "serverInfo": {"name": "compactveteran", "version": "1"}}}
+            if not initialized:
+                pending_initialize = response
+                continue
         elif method == "hooks/list":
             cwds = request.get("params", {}).get("cwds", [str(REPO)])
             cwd = cwds[0] if cwds else str(REPO)

@@ -62,7 +62,7 @@ fn rpc(trusted: Option<bool>) -> io::Result<Vec<(String, String, bool)>> {
     let read = |id: u64| -> io::Result<Value> {
         loop {
             let v = rx
-                .recv_timeout(Duration::from_secs(10))
+                .recv_timeout(Duration::from_secs(30))
                 .map_err(|e| io::Error::other(format!("app-server response: {e}")))??;
             if v["id"].as_u64() == Some(id) {
                 if let Some(error) = v.get("error") {
@@ -77,10 +77,10 @@ fn rpc(trusted: Option<bool>) -> io::Result<Vec<(String, String, bool)>> {
     };
     send(
         &mut i,
-        json!({"id":1,"method":"initialize","params":{"clientInfo":{"name":"compactveteran","version":"0.1.1"}}}),
+        json!({"id":1,"method":"initialize","params":{"clientInfo":{"name":"compactveteran","version":"0.1.2"}}}),
     )?;
-    read(1)?;
     send(&mut i, json!({"method":"initialized","params":{}}))?;
+    read(1)?;
     send(
         &mut i,
         json!({"id":2,"method":"hooks/list","params":{"cwds":[env::current_dir()?.display().to_string()]}}),
