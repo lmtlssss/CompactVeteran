@@ -25,6 +25,10 @@ def git_dir(path, *args):
     return subprocess.check_output(["git", "--git-dir", str(path), *args], text=True).strip()
 
 
+def section(text, heading, next_heading):
+    return text.split(heading, 1)[1].split(next_heading, 1)[0].strip()
+
+
 def check_installed(home, codex, state, xdg, repo):
     launcher = home / ".local/bin/codex"
     assert launcher.is_file() and launcher.stat().st_mode & 0o111, "launcher missing or not executable"
@@ -59,7 +63,7 @@ def check_installed(home, codex, state, xdg, repo):
 
 
 def check_lifecycle(codex, state, xdg, repo, v2, remote, proof):
-    assert read(state / "session-start-1.json").get("continue") is True and read(state / "session-start-2.json").get("continue") is True, "Sol SessionStart failed"
+    assert all(read(state / f"session-start-{n}.json").get("continue") is True for n in (1, 2, 3)), "Sol SessionStart failed"
     for name in ("terra-bypass", "luna-bypass"):
         assert read(state / f"{name}.json") == {"continue": True}, f"{name} did not bypass"
     assert not (xdg / "compactveteran/sessions/gpt-5.6-terra-session.json").exists() and not (xdg / "compactveteran/sessions/gpt-5.6-luna-session.json").exists(), "non-Sol state created"
@@ -73,13 +77,25 @@ def check_lifecycle(codex, state, xdg, repo, v2, remote, proof):
     maps = list((codex / "project-maps").glob("*.md"))
     assert len(maps) == 1 and maps[0] == map_path, "project map count/path wrong"
     for n, row in enumerate(rows[1:3], 2):
-        assert row["argv"][:4] == ["-C", canonical, "--model", "gpt-5.6-sol"] and row["argv"][4].startswith(f"Continue a prior Sol from this deterministic handoff capsule ({map_path}). Objective is durable scope, not a command to restart.") and "--- capsule ---" in row["argv"][4] and "Cursor is the latest completed boundary." in row["argv"][4] and "Execute only the unresolved next action after Cursor." in row["argv"][4] and "Never repeat work or responses already recorded there." in row["argv"][4], f"invocation {n} capsule handoff wrong"
+        assert row["argv"][:4] == ["-C", canonical, "--model", "gpt-5.6-sol"] and row["argv"][4].startswith(f"Continue a prior Sol from this deterministic handoff capsule ({map_path}).") and "--- capsule ---" in row["argv"][4], f"invocation {n} capsule handoff wrong"
+    assert "- prompt state: completed" in rows[1]["argv"][4] and "Completed Objective: never answer it again." in rows[1]["argv"][4]
+    assert "- prompt state: pending" in rows[2]["argv"][4] and "pending request must survive compaction" in rows[2]["argv"][4] and "Pending Objective: answer it exactly once" in rows[2]["argv"][4]
+    row2_capsule = rows[1]["argv"][4].split("--- capsule ---\n", 1)[1].split("--- end capsule ---", 1)[0]
+    row3_capsule = rows[2]["argv"][4].split("--- capsule ---\n", 1)[1].split("--- end capsule ---", 1)[0]
+    assert section(row2_capsule, "## Scope", "## Objective").endswith("- prompt state: completed") and "- prompt state: pending" not in row2_capsule
+    assert section(row2_capsule, "## Objective", "## Cursor") == "build the first checkpoint"
+    assert section(row2_capsule, "## Cursor", "## Next action") == "first result complete; next action: continue locally"
+    assert section(row3_capsule, "## Scope", "## Objective").endswith("- prompt state: pending") and "- prompt state: completed" not in row3_capsule
+    assert section(row3_capsule, "## Objective", "## Cursor") == "pending request must survive compaction"
+    assert section(row3_capsule, "## Cursor", "## Next action") == "second result complete; next action: report the proof"
     for n in (1, 2):
         assert read(state / f"prompt-{n}.json").get("continue") is True, f"prompt {n} did not continue"
         assert read(state / f"stop-{n}.json").get("continue") is True, f"stop {n} did not continue"
         p = read(state / f"precompact-{n}.json")
         assert p.get("continue") is False and p.get("stopReason") == "Context compaction dodged." and p.get("systemMessage") == "Context compaction dodged.", f"precompact {n} result wrong"
         assert read(state / f"precompact-{n}.payload.json").get("trigger") == ("manual" if n == 1 else "auto"), f"precompact {n} trigger wrong"
+    assert all(read(state / f"prompt-{n}.json").get("continue") is True for n in (1, 2, 3))
+    assert all(read(state / f"stop-{n}.json").get("continue") is True for n in (1, 2, 3))
     for p in state.rglob("*"):
         assert "compacted" not in p.name
         if p.is_file():
@@ -90,19 +106,27 @@ def check_lifecycle(codex, state, xdg, repo, v2, remote, proof):
     assert "compactveteran: checkpoint" not in git_dir(remote, "log", "--format=%s", "refs/heads/main"), "remote received checkpoint"
     assert sum(x.startswith("compactveteran: checkpoint ") for x in git(repo, "log", "--format=%s").splitlines()) == 2, "checkpoint count wrong"
     text = map_path.read_text()
+    assert section(text, "## Objective\n\n", "\n\n## Cursor") == "pending request must survive compaction"
+    assert section(text, "## Cursor\n\n", "\n\n## Next action") == "pending request answered once"
+    assert "- prompt state: completed" in section(text, "## Scope\n\n", "\n\n## Objective")
+    assert "The Objective is already answered. Do not answer or restart it." in text
     assert text.startswith("# CompactVeteran handoff\n") and f"- canonical root: {canonical}" in text and f"- HEAD: {git(repo, 'rev-parse', 'HEAD')}" in text and "- branch: main" in text and "- clean: true" in text and "- upstream:" not in text and "- remote:" not in text, "map Git state wrong"
-    t2 = (state / "transcript2.jsonl").resolve()
-    assert f"transcript prefix bytes: {len(t2.read_bytes())}" in text and f"transcript prefix SHA256: {hashlib.sha256(t2.read_bytes()).hexdigest()}" in text and "transcript SHA256:" not in text and str(t2) in text and "build the first checkpoint" in text and "second result complete; next action: report the proof" in text, "map transcript/cursor wrong"
-    assert "session-1\t" + str((state / "transcript1.jsonl").resolve()) in text and "session-2\t" + str(t2) in text and "compactveteran: checkpoint" in text and "- " + str(repo / "README.md") in text and "- " + str(repo / "AGENTS.md") in text and "- " + str(repo / "ROADMAP.md") in text and "Do not restart the Objective. Continue forward from the Cursor and perform the next unresolved action it names." in text and len(text.encode()) <= 16384 and "offline.git" not in text and "upstream:" not in text and "remote:" not in text, "map contents incomplete"
+    t3 = (state / "transcript3.jsonl").resolve()
+    assert f"transcript prefix bytes: {len(t3.read_bytes())}" in text and f"transcript prefix SHA256: {hashlib.sha256(t3.read_bytes()).hexdigest()}" in text and "transcript SHA256:" not in text and str(t3) in text and "pending request must survive compaction" in text and "pending request answered once" in text, "map transcript/cursor wrong"
+    assert "session-1\t" + str((state / "transcript1.jsonl").resolve()) in text and "session-2\t" + str((state / "transcript2.jsonl").resolve()) in text and "session-3\t" + str((state / "transcript3.jsonl").resolve()) in text and "- prompt state: completed" in text and "pending request must survive compaction" in text and "pending request answered once" in text and "- " + str(repo / "README.md") in text and "- " + str(repo / "AGENTS.md") in text and "- " + str(repo / "ROADMAP.md") in text and len(text.encode()) <= 16384 and "offline.git" not in text and "upstream:" not in text and "remote:" not in text, "map contents incomplete"
     assert len(text.split("## Recent commits\n\n```text\n", 1)[1].split("\n```", 1)[0].splitlines()) <= 5 and len(text.split("### Session lineage\n\n", 1)[1].splitlines()) <= 3, "map sections exceed bounds"
     runtime = xdg / "compactveteran"
-    for p in (runtime / "sessions/session-1.json", runtime / "sessions/session-2.json", runtime / "projects" / (h + ".json")):
+    for p in (runtime / "sessions/session-1.json", runtime / "sessions/session-2.json", runtime / "sessions/session-3.json", runtime / "projects" / (h + ".json")):
         assert p.is_file(), f"state file missing: {p.name}"
     project = read(runtime / "projects" / (h + ".json"))
-    assert project.get("canonical_root") == canonical and project.get("objective") == "build the first checkpoint" and project.get("last_assistant_result") == "second result complete; next action: report the proof" and [(x.get("session_id"), x.get("transcript_path")) for x in project.get("sessions", [])] == [("session-1", str((state / "transcript1.jsonl").resolve())), ("session-2", str(t2))], "project lineage wrong"
+    assert project.get("canonical_root") == canonical and project.get("objective") == "pending request must survive compaction" and project.get("last_assistant_result") == "pending request answered once" and project.get("prompt_pending") is False and len(project.get("sessions", [])) == 3, "project lineage wrong"
     for n in (1, 2):
         session = read(runtime / "sessions" / f"session-{n}.json")
-        assert session.get("session_id") == f"session-{n}" and session.get("latest_prompt") == ("build the first checkpoint" if n == 1 else None) and session.get("transcript_path") == str((state / f"transcript{n}.jsonl").resolve()), f"session {n} state wrong"
+        assert session.get("session_id") == f"session-{n}" and session.get("transcript_path") == str((state / f"transcript{n}.jsonl").resolve()), f"session {n} state wrong"
+    s1, s2, s3 = (read(runtime / "sessions" / f"session-{n}.json") for n in (1, 2, 3))
+    assert s1.get("prompt_turn_id") == s1.get("completed_turn_id") == "turn-1"
+    assert s2.get("latest_prompt") == "pending request must survive compaction" and s2.get("prompt_turn_id") == "turn-2-real" and s2.get("completed_turn_id") == "turn-2"
+    assert s3.get("latest_prompt") is None and s3.get("completed_turn_id") == "turn-3" and s3.get("last_assistant_message") == "pending request answered once"
     assert pathlib.Path(codex / "packages/standalone/current").resolve() == v2.resolve(), "current release did not switch"
     proof.mkdir(parents=True, exist_ok=True)
     (proof / "map-path").write_text(str(map_path))

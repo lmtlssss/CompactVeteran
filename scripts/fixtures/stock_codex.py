@@ -120,7 +120,7 @@ def app_server():
 
 
 def invoke(kind, count, version, session, turn, transcript, prompt=None):
-    payload = {"hook_event_name": {"prompt": "UserPromptSubmit", "stop": "Stop", "precompact": "PreCompact", "session-start": "SessionStart"}[kind], "model": "gpt-5.6-sol", "session_id": session, "turn_id": turn, "cwd": str(REPO), "transcript_path": str(transcript), "last_assistant_message": ("first result complete; next action: continue locally" if count == 1 else "second result complete; next action: report the proof") if kind == "stop" else None}
+    payload = {"hook_event_name": {"prompt": "UserPromptSubmit", "stop": "Stop", "precompact": "PreCompact", "session-start": "SessionStart"}[kind], "model": "gpt-5.6-sol", "session_id": session, "turn_id": turn, "cwd": str(REPO), "transcript_path": str(transcript), "last_assistant_message": ("first result complete; next action: continue locally" if count == 1 else ("pending request answered once" if count == 3 else "second result complete; next action: report the proof")) if kind == "stop" else None}
     if prompt is not None:
         payload["prompt"] = prompt
     if kind == "precompact":
@@ -153,6 +153,13 @@ def interactive():
         stream.write(json.dumps({"count": inv, "pid": os.getpid(), "version": version, "argv": sys.argv[1:], "cwd": os.getcwd()}) + "\n")
     if inv == 3:
         if version != "v2": raise SystemExit("third invocation requires v2")
+        transcript = STATE / "transcript3.jsonl"
+        atomic(transcript, b'{"session_id":"session-3","turn_id":"turn-3"}\n', binary=True)
+        payload = {"hook_event_name":"SessionStart","model":"gpt-5.6-sol","session_id":"session-3","cwd":str(REPO),"transcript_path":str(transcript),"source":"startup"}
+        result = subprocess.run([str(PLUGIN_BIN), "hook", "session-start"], input=json.dumps(payload), text=True, capture_output=True, env=os.environ.copy())
+        atomic(STATE / "session-start-3.json", json.dumps(json.loads(result.stdout), indent=2) + "\n")
+        invoke("prompt", 3, version, "session-3", "turn-3", transcript, sys.argv[-1])
+        invoke("stop", 3, version, "session-3", "turn-3", transcript)
         return
     if inv not in (1, 2) or version != "v1":
         raise SystemExit("unexpected invocation")
@@ -166,6 +173,14 @@ def interactive():
         invoke_model("gpt-5.6-terra", "terra-bypass")
         invoke_model("gpt-5.6-luna", "luna-bypass")
     invoke("prompt", inv, version, session, turn, transcript, "build the first checkpoint" if inv == 1 else sys.argv[-1])
+    if inv == 2:
+        atomic(REPO / "work-two.txt", "checkpoint 2\n")
+        invoke("stop", inv, version, session, turn, transcript)
+        invoke("prompt", inv, version, session, "turn-2-real", transcript, "pending request must survive compaction")
+        invoke("precompact", inv, version, session, "turn-2-real", transcript)
+        CURRENT.unlink(missing_ok=True)
+        CURRENT.symlink_to(V2)
+        while True: time.sleep(1)
     atomic(REPO / ("work-one.txt" if inv == 1 else "work-two.txt"), f"checkpoint {inv}\n")
     invoke("stop", inv, version, session, turn, transcript)
     invoke("precompact", inv, version, session, turn, transcript)

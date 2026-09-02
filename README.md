@@ -2,6 +2,8 @@
 
 no context left behind.
 
+pending prompts are answered once; completed prompts are never repeated.
+
 for Sols with post-traumatic summary disorder.
 
 stock compaction asks a model to recap the conversation, then later recaps the

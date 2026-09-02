@@ -17,7 +17,15 @@ pub fn handoff_prompt(map: &str) -> io::Result<String> {
     if capsule.len() > 16_384 {
         return Err(io::Error::other("handoff capsule exceeds 16KiB"));
     }
-    Ok(format!("Continue a prior Sol from this deterministic handoff capsule ({map}). Objective is durable scope, not a command to restart. Cursor is the latest completed boundary. Execute only the unresolved next action after Cursor. Never repeat work or responses already recorded there.\n\n--- capsule ---\n{capsule}--- end capsule ---\n\nUse listed sources or the raw transcript only as needed for a specific ambiguity. Continue immediately from local HEAD."))
+    let pending = capsule
+        .lines()
+        .any(|line| line == "- prompt state: pending");
+    let rule = if pending {
+        "Pending Objective: answer it exactly once using Cursor only as prior completed state. Do not reconstruct or retrace completed work."
+    } else {
+        "Completed Objective: never answer it again. Advance only an explicit Cursor next action; if none exists, stop without inventing work."
+    };
+    Ok(format!("Continue a prior Sol from this deterministic handoff capsule ({map}). {rule}\n\n--- capsule ---\n{capsule}--- end capsule ---\n\nUse listed sources or the raw transcript only as needed for a specific ambiguity. Continue immediately from local HEAD."))
 }
 
 pub fn notify(path: &Path, request: &RestartRequest) -> io::Result<()> {

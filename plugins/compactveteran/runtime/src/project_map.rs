@@ -60,7 +60,17 @@ pub fn write(r: &Path, h: &str, s: &state::SessionState) -> io::Result<PathBuf> 
         .filter(|x| !x.is_empty())
         .or(s.last_assistant_message.as_deref())
         .unwrap_or("");
-    let mut x = format!("# CompactVeteran handoff\n\n## Scope\n\n- canonical root: {}\n- branch: {}\n- HEAD: {}\n- clean: {}\n- current session: {}\n- transcript: {}\n- transcript prefix bytes: {}\n- transcript prefix SHA256: {}\n\n## Objective\n\n{}\n\n## Cursor\n\n{}\n\n## Next action\n\nDo not restart the Objective. Continue forward from the Cursor and perform the next unresolved action it names. Use listed project sources or the raw transcript only as needed for a specific ambiguity.\n\n## Recent commits\n\n```text\n{}\n```\n\n## Sources\n\n", r.display(), branch, head, clean, s.session_id, t, tb, th, clip(objective, 6000), clip(cursor, 4000), g(r, &["log", "-5", "--oneline"])?);
+    let prompt_state = if project.prompt_pending {
+        "pending"
+    } else {
+        "completed"
+    };
+    let next = if project.prompt_pending {
+        "Answer the Objective exactly once. Cursor is the prior completed boundary. Do not repeat Cursor work. Use listed project sources or the raw transcript only as needed for a specific ambiguity."
+    } else {
+        "The Objective is already answered. Do not answer or restart it. Continue only an explicit unresolved action named by Cursor; if none exists, stop without inventing or retracing work. Use listed project sources or the raw transcript only as needed for a specific ambiguity."
+    };
+    let mut x = format!("# CompactVeteran handoff\n\n## Scope\n\n- canonical root: {}\n- branch: {}\n- HEAD: {}\n- clean: {}\n- current session: {}\n- transcript: {}\n- transcript prefix bytes: {}\n- transcript prefix SHA256: {}\n- prompt state: {}\n\n## Objective\n\n{}\n\n## Cursor\n\n{}\n\n## Next action\n\n{}\n\n## Recent commits\n\n```text\n{}\n```\n\n## Sources\n\n", r.display(), branch, head, clean, s.session_id, t, tb, th, prompt_state, clip(objective, 6000), clip(cursor, 4000), next, g(r, &["log", "-5", "--oneline"])?);
     for name in ["AGENTS.md", "ROADMAP.md", "PRODUCT_ROADMAP.md", "README.md"] {
         if r.join(name).exists() {
             x.push_str(&format!("- {}\n", r.join(name).display()));

@@ -11,6 +11,10 @@ pub struct SessionState {
     pub model: Option<String>,
     #[serde(default)]
     pub last_assistant_message: Option<String>,
+    #[serde(default)]
+    pub prompt_turn_id: Option<String>,
+    #[serde(default)]
+    pub completed_turn_id: Option<String>,
 }
 #[derive(Serialize, Deserialize, Clone)]
 pub struct SessionRef {
@@ -25,6 +29,8 @@ pub struct ProjectState {
     pub objective: Option<String>,
     #[serde(default)]
     pub last_assistant_result: Option<String>,
+    #[serde(default)]
+    pub prompt_pending: bool,
 }
 pub fn dir() -> PathBuf {
     env::var_os("XDG_STATE_HOME")
@@ -64,13 +70,15 @@ pub fn merge_hook(i: &HookInput) -> io::Result<SessionState> {
         s.latest_turn_id = i.turn_id.clone()
     }
     if i.prompt.as_deref().is_some_and(|x| !x.is_empty()) {
-        s.latest_prompt = i.prompt.clone()
+        s.latest_prompt = i.prompt.clone();
+        s.prompt_turn_id = i.turn_id.clone();
     }
     if i.last_assistant_message
         .as_deref()
         .is_some_and(|x| !x.is_empty())
     {
         s.last_assistant_message = i.last_assistant_message.clone();
+        s.completed_turn_id = i.turn_id.clone();
     }
     if i.transcript_path.as_deref().is_some_and(|x| !x.is_empty()) {
         s.transcript_path = i.transcript_path.clone()
@@ -105,9 +113,15 @@ pub fn record_project_session(root: &str, h: &str, s: &SessionState) -> io::Resu
     x.canonical_root = root.into();
     if let Some(v) = s.latest_prompt.as_ref().filter(|v| !v.is_empty()) {
         x.objective = Some(v.clone());
+        x.prompt_pending = s.prompt_turn_id.is_some() && s.prompt_turn_id != s.completed_turn_id;
     }
     if let Some(v) = s.last_assistant_message.as_ref().filter(|v| !v.is_empty()) {
         x.last_assistant_result = Some(v.clone());
+        if s.latest_prompt.is_none() {
+            x.prompt_pending = false;
+        } else if s.completed_turn_id == s.prompt_turn_id {
+            x.prompt_pending = false;
+        }
     }
     atomic::write(&p, &serde_json::to_vec_pretty(&x).unwrap())
 }
