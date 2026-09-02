@@ -57,8 +57,16 @@ fn launch(
     } else {
         c.args(args);
     }
+    let codex_home = env::var_os("CODEX_HOME")
+        .map(PathBuf::from)
+        .or_else(|| env::var_os("HOME").map(|p| PathBuf::from(p).join(".codex")))
+        .ok_or_else(|| io::Error::other("missing Codex home"))?;
     c.env("COMPACTVETERAN_SOCKET", sock)
         .env("COMPACTVETERAN_SUPERVISED", "1")
+        .env(
+            "CODEX_INSTALL_DIR",
+            codex_home.join("plugins/data/compactveteran-compactveteran/stock-bin"),
+        )
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())

@@ -150,7 +150,7 @@ def interactive():
     write_json("invocation-count.json", inv)
     version = os.environ.get("STOCK_VERSION", "v1")
     with (STATE / "invocations.jsonl").open("a") as stream:
-        stream.write(json.dumps({"count": inv, "pid": os.getpid(), "version": version, "argv": sys.argv[1:], "cwd": os.getcwd()}) + "\n")
+        stream.write(json.dumps({"count": inv, "pid": os.getpid(), "version": version, "argv": sys.argv[1:], "cwd": os.getcwd(), "codex_install_dir": os.environ.get("CODEX_INSTALL_DIR")}) + "\n")
     if inv == 3:
         if version != "v2": raise SystemExit("third invocation requires v2")
         transcript = STATE / "transcript3.jsonl"
@@ -180,6 +180,11 @@ def interactive():
         invoke("precompact", inv, version, session, "turn-2-real", transcript)
         CURRENT.unlink(missing_ok=True)
         CURRENT.symlink_to(V2)
+        stock_bin = Path(os.environ["CODEX_INSTALL_DIR"])
+        stock_bin.mkdir(parents=True, exist_ok=True)
+        visible = stock_bin / "codex"
+        visible.unlink(missing_ok=True)
+        visible.symlink_to(CURRENT / "bin/codex")
         while True: time.sleep(1)
     atomic(REPO / ("work-one.txt" if inv == 1 else "work-two.txt"), f"checkpoint {inv}\n")
     invoke("stop", inv, version, session, turn, transcript)

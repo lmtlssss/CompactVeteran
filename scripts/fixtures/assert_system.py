@@ -72,6 +72,11 @@ def check_lifecycle(codex, state, xdg, repo, v2, remote, proof):
     assert len({x["pid"] for x in rows}) == 3 and all(x["pid"] > 0 for x in rows), "process lineage invalid"
     canonical = str(repo.resolve())
     assert all(x["cwd"] == canonical for x in rows), "invocation cwd is not canonical"
+    stock_bin = codex / "plugins/data/compactveteran-compactveteran/stock-bin"
+    assert all(x.get("codex_install_dir") == str(stock_bin) for x in rows), "stock install dir inheritance changed"
+    assert (stock_bin / "codex").resolve() == (v2 / "bin/codex").resolve(), "stock visible symlink did not follow update"
+    wrapper = codex.parent / ".local/bin/codex"
+    assert wrapper.is_file() and "compactveteran" in wrapper.read_text(), "wrapper was replaced by update"
     h = hashlib.sha256(canonical.encode()).hexdigest()
     map_path = codex / "project-maps" / (h + ".md")
     maps = list((codex / "project-maps").glob("*.md"))
