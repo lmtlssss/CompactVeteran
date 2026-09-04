@@ -28,6 +28,20 @@ pub fn root(c: &Path) -> io::Result<PathBuf> {
     }
     fs::canonicalize(g(c, &["rev-parse", "--show-toplevel"])?)
 }
+pub fn is_broad_scope(c: &Path) -> bool {
+    let cwd = fs::canonicalize(c).unwrap_or_else(|_| c.to_path_buf());
+    if cwd == Path::new("/") || env_home().is_some_and(|h| cwd == h) {
+        return true;
+    }
+    let Ok(r) = g(&cwd, &["rev-parse", "--show-toplevel"]) else {
+        return false;
+    };
+    let r = fs::canonicalize(r).unwrap_or_default();
+    r == Path::new("/") || env_home().is_some_and(|h| r == h)
+}
+fn env_home() -> Option<PathBuf> {
+    std::env::var_os("HOME").and_then(|h| fs::canonicalize(h).ok())
+}
 pub fn root_hash(r: &Path) -> String {
     let mut h = Sha256::new();
     h.update(r.to_string_lossy().as_bytes());

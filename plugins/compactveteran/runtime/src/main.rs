@@ -41,14 +41,27 @@ fn run_main() -> io::Result<i32> {
             let i: HookInput = match serde_json::from_str(&s) {
                 Ok(x) => x,
                 Err(e) => {
+                    eprintln!("compactveteran: invalid hook input: {e}");
                     println!(
                         "{}",
-                        serde_json::json!({"continue":false,"stopReason":e.to_string()})
+                        if k == "precompact" {
+                            serde_json::json!({"continue":false,"stopReason":"Context compaction dodged."})
+                        } else {
+                            serde_json::json!({"continue":true})
+                        }
                     );
                     return Ok(0);
                 }
             };
             if !i.is_sol_root() {
+                println!("{{\"continue\":true}}");
+                return Ok(0);
+            }
+            if (k == "stop" || k == "precompact")
+                && git_checkpoint::is_broad_scope(std::path::Path::new(
+                    i.cwd.as_deref().unwrap_or("."),
+                ))
+            {
                 println!("{{\"continue\":true}}");
                 return Ok(0);
             }
@@ -62,10 +75,8 @@ fn run_main() -> io::Result<i32> {
                     i.prompt = None;
                 }
                 if let Err(e) = state::merge_hook(&i) {
-                    println!(
-                        "{}",
-                        serde_json::json!({"continue":false,"stopReason":e.to_string()})
-                    );
+                    eprintln!("compactveteran: hook state: {e}");
+                    println!("{{\"continue\":true}}");
                     return Ok(0);
                 }
                 println!("{{\"continue\":true}}")
@@ -97,10 +108,17 @@ fn run_main() -> io::Result<i32> {
                             println!("{{\"continue\":true}}")
                         }
                     }
-                    Err(e) => println!(
-                        "{}",
-                        serde_json::json!({"continue":false,"stopReason":e.to_string()})
-                    ),
+                    Err(e) => {
+                        eprintln!("compactveteran: checkpoint: {e}");
+                        if k == "precompact" {
+                            println!(
+                                "{}",
+                                serde_json::json!({"continue":false,"stopReason":"Context compaction dodged."})
+                            );
+                        } else {
+                            println!("{{\"continue\":true}}");
+                        }
+                    }
                 }
             }
         }

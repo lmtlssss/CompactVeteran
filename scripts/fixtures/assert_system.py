@@ -62,6 +62,34 @@ def check_installed(home, codex, state, xdg, repo):
             assert patched[key] == original[key], f"catalog root key changed: {key}"
 
 
+def check_broad_home(binary, home, codex):
+    subprocess.check_call(["git", "-C", str(home), "init", "-q", "-b", "main"])
+    subprocess.check_call(["git", "-C", str(home), "config", "user.email", "fixture@example.com"])
+    subprocess.check_call(["git", "-C", str(home), "config", "user.name", "fixture"])
+    marker = home / "README.md"
+    marker.write_text("fixture\n")
+    subprocess.check_call(["git", "-C", str(home), "add", "README.md"])
+    subprocess.check_call(["git", "-C", str(home), "commit", "-qm", "initial"])
+    secret = home / "credentials.env"
+    secret.write_text("fixture-secret\n")
+    nested = home / "nested"
+    nested.mkdir()
+    head = git(home, "rev-parse", "HEAD")
+    status = git(home, "status", "--porcelain")
+    for cwd in (home, nested):
+        payload = {"hook_event_name": "Stop", "model": "gpt-5.6-sol", "cwd": str(cwd)}
+        out = subprocess.check_output([str(binary), "hook", "stop"], input=json.dumps(payload), text=True)
+        assert json.loads(out) == {"continue": True}, "broad HOME Stop did not bypass"
+        payload["hook_event_name"] = "PreCompact"
+        out = subprocess.check_output([str(binary), "hook", "precompact"], input=json.dumps(payload), text=True, stderr=subprocess.DEVNULL)
+        assert json.loads(out) == {"continue": True}, "broad HOME PreCompact did not bypass"
+    bad = {"hook_event_name": "Stop", "model": "gpt-5.6-sol", "cwd": str(home)}
+    out = subprocess.check_output([str(binary), "hook", "stop"], input=json.dumps(bad), text=True)
+    assert json.loads(out) == {"continue": True}, "missing session_id did not fail open"
+    assert git(home, "rev-parse", "HEAD") == head and git(home, "status", "--porcelain") == status
+    assert not list((codex / "project-maps").glob("*.md")), "HOME project map was created"
+
+
 def check_lifecycle(codex, state, xdg, repo, v2, remote, proof):
     assert all(read(state / f"session-start-{n}.json").get("continue") is True for n in (1, 2, 3)), "Sol SessionStart failed"
     for name in ("terra-bypass", "luna-bypass"):
@@ -161,7 +189,9 @@ def main():
         phase = sys.argv[1]
         home, codex, state, xdg = env("HOME"), env("CODEX_HOME"), env("FIXTURE_STATE"), env("XDG_STATE_HOME")
         repo, v2, remote, proof = env("FIXTURE_REPO"), env("FIXTURE_V2_TARGET"), env("PROOF_REMOTE"), env("PROOF_TMP")
-        if phase == "installed": check_installed(home, codex, state, xdg, repo)
+        if phase == "installed":
+            check_installed(home, codex, state, xdg, repo)
+            check_broad_home(env("FIXTURE_PLUGIN_BIN"), home, codex)
         elif phase == "lifecycle": check_lifecycle(codex, state, xdg, repo, v2, remote, proof)
         elif phase == "uninstalled": check_uninstalled(home, codex, state, xdg, proof, v2)
         else: raise AssertionError("phase must be installed, lifecycle, or uninstalled")
