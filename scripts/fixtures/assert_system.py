@@ -152,6 +152,8 @@ def check_uninstalled(home, codex, state, xdg, proof, v2):
     map_path = pathlib.Path((proof / "map-path").read_text())
     assert map_path.exists() and hashlib.sha256(map_path.read_bytes()).hexdigest() == (proof / "map-sha").read_text(), "map was changed"
     assert len(list((codex / "project-maps").glob("*.md"))) == 1, "map count changed"
+    archive = pathlib.Path((proof / "log-archive").read_text().strip())
+    assert sorted(p.name for p in archive.iterdir()) == ["logs_2.sqlite", "logs_2.sqlite-shm", "logs_2.sqlite-wal"], "log archive did not survive uninstall"
 
 
 def main():

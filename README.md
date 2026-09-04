@@ -64,6 +64,8 @@ Sol gets the 1,050,000-token ceiling. Terra and Luna stay stock.
 
 Codex updates move stock/current; the wrapper stays put and follows it.
 
+At a clean launch, an oversized Codex log DB trio is archived intact before stock creates a fresh one.
+
 ## uninstall
 
 ```bash

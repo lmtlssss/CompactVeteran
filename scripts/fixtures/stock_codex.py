@@ -149,6 +149,10 @@ def interactive():
     inv = read_json("invocation-count.json", 0) + 1
     write_json("invocation-count.json", inv)
     version = os.environ.get("STOCK_VERSION", "v1")
+    db = env("XDG_STATE_HOME") / "codex-runtime-state/logs_2.sqlite"
+    if not db.exists():
+        db.parent.mkdir(parents=True, exist_ok=True)
+        db.write_bytes(b"fresh")
     with (STATE / "invocations.jsonl").open("a") as stream:
         stream.write(json.dumps({"count": inv, "pid": os.getpid(), "version": version, "argv": sys.argv[1:], "cwd": os.getcwd(), "codex_install_dir": os.environ.get("CODEX_INSTALL_DIR")}) + "\n")
     if inv == 3:
@@ -201,5 +205,11 @@ if __name__ == "__main__":
         plugin(sys.argv[2:])
     elif sys.argv[1:3] == ["app-server", "--stdio"]:
         app_server()
+    elif sys.argv[1:2] == ["--version"]:
+        db = env("XDG_STATE_HOME") / "codex-runtime-state/logs_2.sqlite"
+        if not db.exists():
+            db.parent.mkdir(parents=True, exist_ok=True)
+            db.write_bytes(b"fresh")
+        print("codex fixture")
     else:
         interactive()
